@@ -1,0 +1,18 @@
+# Secrets & environment
+.env
+.env.*
+
+# Production database seed — contains user accounts; NEVER commit to a public repo
+deploy/database.sql
+
+# Local Claude Code / editor config
+.claude/
+
+# User-uploaded avatars (privacy)
+assets/avatars/*
+!assets/avatars/.gitkeep
+
+# Logs & OS cruft
+*.log
+.DS_Store
+Thumbs.db

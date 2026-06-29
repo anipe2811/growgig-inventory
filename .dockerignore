@@ -1,0 +1,10 @@
+.git
+.github
+.claude
+deploy/
+serve.bat
+Dockerfile
+docker-compose.yml
+Caddyfile
+.dockerignore
+*.md

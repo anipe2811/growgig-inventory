@@ -1,0 +1,59 @@
+# Production stack for the SaaS Inventory app.
+#   caddy  -> auto-HTTPS reverse proxy (Let's Encrypt) on :80/:443
+#   app    -> PHP 8.3 + Apache serving the application
+#   db     -> MySQL 8, seeded once from deploy/database.sql
+#
+# Required environment variables (pass via Hostinger "environment" or a .env file):
+#   DB_PASS       strong MySQL root/app password
+#   SITE_DOMAIN   public domain, e.g. growgig.tech  (defaults to growgig.tech)
+#   DB_NAME       database name (defaults to saas_inventory)
+
+services:
+  db:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASS}
+      MYSQL_DATABASE: ${DB_NAME:-saas_inventory}
+    volumes:
+      - db_data:/var/lib/mysql
+      # NOTE: no seed mount here — the production DB volume persists across deploys.
+      # For a brand-new/empty DB, import deploy/database.sql once (see DEPLOY.md).
+    networks: [internal]
+
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      DB_HOST: db
+      DB_NAME: ${DB_NAME:-saas_inventory}
+      DB_USER: root
+      DB_PASS: ${DB_PASS}
+      APP_DEBUG: "false"
+    depends_on: [db]
+    networks: [internal, web]
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      # Port 80 is left to the host's existing nginx; Caddy uses 443 only and
+      # obtains the TLS cert via the ACME TLS-ALPN-01 challenge on 443.
+      - "443:443"
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:-app.growgig.tech}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [app]
+    networks: [web]
+
+volumes:
+  db_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  internal:
+  web:

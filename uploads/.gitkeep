@@ -1,0 +1,2 @@
+# This file keeps the (otherwise empty) uploads/ directory tracked in git.
+# User uploads live here and are excluded from FTP deployment.

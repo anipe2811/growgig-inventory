@@ -1,0 +1,6 @@
+# Auto-HTTPS (Let's Encrypt) for the app. SITE_DOMAIN comes from the environment
+# (defaults to app.growgig.tech). The DNS A record already points to this VPS.
+{$SITE_DOMAIN:app.growgig.tech} {
+    encode gzip
+    reverse_proxy app:80
+}
