@@ -1,0 +1,181 @@
+name: Deploy to VPS
+
+# Auto-deploy the "inventory" Docker Compose stack to the Hostinger VPS on every
+# push to master. RAW OpenSSH (no third-party actions) for zero supply-chain risk.
+#
+# REQUIRED repo secret:
+#   VPS_SSH_KEY      Private SSH key (OpenSSH/PEM) for the deploy user on the VPS.
+#                    Generate a DEDICATED key (see SETUP CHECKLIST); never reuse a personal key.
+#
+# RECOMMENDED repo secret (host-key pinning -> prevents MITM):
+#   VPS_KNOWN_HOSTS  One or more known_hosts lines for 72.62.79.207, captured on a
+#                    TRUSTED machine with:  ssh-keyscan -t ed25519,rsa 72.62.79.207
+#                    If unset, the workflow falls back to ssh-keyscan at runtime (TOFU):
+#                    it still verifies against what it scanned (never StrictHostKeyChecking=no),
+#                    but TOFU trusts whatever answers on the first run. Pin this BEFORE the
+#                    first real deploy and verify the fingerprint out-of-band (Hostinger console).
+#
+# OPTIONAL repo secrets (fall back to hardcoded public values if unset):
+#   VPS_HOST  -> defaults to 72.62.79.207  (IP is effectively public via DNS)
+#   VPS_USER  -> defaults to root          (hardening: a non-login 'deploy' user, see note below)
+#
+# GRACEFUL NO-OP: if VPS_SSH_KEY is missing (e.g. the very push that first adds this
+# file, before secrets exist), the workflow exits 0 with a ::notice instead of failing red.
+#
+# LEAST-PRIVILEGE NOTE: this runs as root because that is the current reality of the box.
+# The hardened setup is a dedicated, non-login `deploy` user in the `docker` group that
+# owns /opt/inventory, with a forced-command authorized_keys entry that runs ONLY the
+# deploy script. Switch VPS_USER to that user and re-point the key when ready.
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch: {}
+
+# Never run two deploys at once. Queue (do NOT cancel) so a deploy is never left
+# half-applied mid rebuild/migration.
+concurrency:
+  group: deploy-vps-inventory
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # Secrets cannot be used in job/step `if:` directly, so surface presence as an output.
+  preflight:
+    runs-on: ubuntu-latest
+    outputs:
+      have_secrets: ${{ steps.check.outputs.have_secrets }}
+    steps:
+      - id: check
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -n "${VPS_SSH_KEY:-}" ]; then
+            echo "have_secrets=true" >> "$GITHUB_OUTPUT"
+            echo "Deploy secret present -> proceeding."
+          else
+            echo "have_secrets=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Deploy skipped::VPS_SSH_KEY is not set yet. Add it under Settings > Secrets and variables > Actions, then re-run. (Expected on the push that first adds this workflow.)"
+          fi
+
+  deploy:
+    needs: preflight
+    if: ${{ needs.preflight.outputs.have_secrets == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST || '72.62.79.207' }}
+      VPS_USER: ${{ secrets.VPS_USER || 'root' }}
+    steps:
+      # 1) Write the SSH private key + known_hosts. No `set -x` while a secret is in
+      #    scope. The key is written from an env var via printf (never in argv); GitHub
+      #    masks the value in logs automatically.
+      - name: Configure SSH (key + host-key pinning)
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          umask 077
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          # Host-key verification. PREFERRED: pinned via VPS_KNOWN_HOSTS secret.
+          # FALLBACK (documented, less secure - TOFU): ssh-keyscan the host. Either way
+          # we write a known_hosts file and verify against it (StrictHostKeyChecking yes);
+          # we NEVER use StrictHostKeyChecking=no.
+          if [ -n "${VPS_KNOWN_HOSTS:-}" ]; then
+            printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+            echo "Using pinned VPS_KNOWN_HOSTS."
+          else
+            echo "::warning title=Host key not pinned::VPS_KNOWN_HOSTS is unset; falling back to ssh-keyscan (trust-on-first-use). Pin it BEFORE the first real deploy: run 'ssh-keyscan -t ed25519,rsa ${VPS_HOST}' on a trusted machine, verify the fingerprint via the Hostinger console, and store the output as VPS_KNOWN_HOSTS."
+            ssh-keyscan -t ed25519,rsa "$VPS_HOST" > ~/.ssh/known_hosts 2>/dev/null
+          fi
+          chmod 600 ~/.ssh/known_hosts
+
+          cat > ~/.ssh/config <<EOF_CFG
+          Host vps
+            HostName ${VPS_HOST}
+            User ${VPS_USER}
+            IdentityFile ~/.ssh/deploy_key
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            UserKnownHostsFile ~/.ssh/known_hosts
+            ConnectTimeout 20
+          EOF_CFG
+          chmod 600 ~/.ssh/config
+
+      # 2) Run the deploy. The remote script is piped over STDIN (no secrets in argv on
+      #    either side). `set -euo pipefail` makes any failure fail the job. Every
+      #    `docker compose` call is pinned to project "inventory" + /opt/inventory, so it
+      #    CANNOT touch hermes-agent-9fvc, the host nginx, or any other project. No prune,
+      #    no `down`, no `-v`, no volume removal -> db_data and caddy_data persist.
+      - name: Deploy (fetch + reset --hard + migrations + rebuild)
+        run: |
+          set -euo pipefail
+          ssh vps 'bash -s' <<'REMOTE'
+          set -euo pipefail
+
+          APP_DIR=/opt/inventory
+          # Belt-and-suspenders project scoping: explicit -p AND --project-directory + -f.
+          COMPOSE="docker compose -p inventory --project-directory ${APP_DIR} -f ${APP_DIR}/docker-compose.yml"
+
+          cd "${APP_DIR}"
+
+          echo "==> Updating code to origin/master (public repo, no credentials needed)"
+          git fetch --prune origin master
+          # reset --hard updates TRACKED files only; the UNTRACKED .env is preserved.
+          git reset --hard origin/master
+          echo "    now at: $(git rev-parse --short HEAD)"
+
+          echo "==> Applying idempotent migrations (deploy/migrations/*.sql) BEFORE rebuild"
+          # Migrations run before the app image goes live so new code never serves against
+          # an un-migrated schema. Each file MUST be idempotent (INSERT ... WHERE NOT EXISTS
+          # / CREATE ... IF NOT EXISTS) because there is no applied-ledger and every file
+          # runs on EVERY deploy. .sql is piped from the HOST checkout (deploy/ is in
+          # .dockerignore, so it is NOT in the image). The db container must be running for
+          # exec; bring it up first WITHOUT touching app/caddy.
+          shopt -s nullglob
+          migrations=(deploy/migrations/*.sql)
+          if [ ${#migrations[@]} -eq 0 ]; then
+            echo "    no migrations found, skipping."
+          else
+            echo "    ensuring db service is up"
+            ${COMPOSE} up -d --no-build db
+            # Wait for MySQL to accept connections (creds read INSIDE the container; never echoed).
+            for i in $(seq 1 30); do
+              if ${COMPOSE} exec -T db sh -c 'mysqladmin ping -uroot -p"$MYSQL_ROOT_PASSWORD" --silent' >/dev/null 2>&1; then
+                break
+              fi
+              [ "$i" -eq 30 ] && { echo "ERROR: db did not become ready in time"; exit 1; }
+              sleep 2
+            done
+            IFS=$'\n' migrations=($(printf '%s\n' "${migrations[@]}" | sort)); unset IFS
+            for f in "${migrations[@]}"; do
+              echo "    applying ${f}"
+              ${COMPOSE} exec -T db sh -c 'exec mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' < "${f}"
+            done
+          fi
+
+          echo "==> Rebuilding and (re)starting ONLY the inventory stack"
+          # Code is baked into the app image (COPY . in the Dockerfile), so a rebuild is
+          # mandatory; a plain restart would ship stale code. --remove-orphans is scoped to
+          # project 'inventory' and cannot affect other projects.
+          ${COMPOSE} up -d --build --remove-orphans
+
+          echo "==> Deploy complete. Current inventory services:"
+          ${COMPOSE} ps
+          REMOTE
+
+      # 3) Scrub the key from the ephemeral runner (defence in depth).
+      - name: Clean up SSH key
+        if: ${{ always() }}
+        run: |
+          shred -u ~/.ssh/deploy_key 2>/dev/null || rm -f ~/.ssh/deploy_key
+          rm -f ~/.ssh/config ~/.ssh/known_hosts
