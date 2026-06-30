@@ -62,6 +62,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    /* Edit one movement's quantity (fix a wrong entry); rebalances the item's ledger. */
+    if (($_POST['action'] ?? '') === 'edit_movement') {
+        $mid    = (int) ($_POST['mv_id'] ?? 0);
+        $newQty = (int) ($_POST['mv_qty'] ?? 0);
+        if ($mid > 0 && $newQty > 0) {
+            $pdo->beginTransaction();
+            try {
+                $sel = $pdo->prepare('SELECT id, item_id, type, quantity FROM stock_movements WHERE id = ? AND branch_id = ? FOR UPDATE');
+                $sel->execute([$mid, $branchId]);
+                $row = $sel->fetch();
+                if ($row && (int) $row['quantity'] !== $newQty) {
+                    $iid    = (int) $row['item_id'];
+                    $signed = ($row['type'] === 'in' ? 1 : -1) * ($newQty - (int) $row['quantity']);
+                    $pdo->prepare('UPDATE stock_movements SET quantity = ? WHERE id = ?')->execute([$newQty, $mid]);
+                    $pdo->prepare('UPDATE items SET quantity = quantity + ? WHERE id = ? AND branch_id = ?')->execute([$signed, $iid, $branchId]);
+                    // Rebuild balance_after for the item's whole ledger (opening = current − net change).
+                    $q = $pdo->prepare('SELECT quantity FROM items WHERE id = ? AND branch_id = ?');
+                    $q->execute([$iid, $branchId]);
+                    $running = (int) $q->fetchColumn();
+                    $q = $pdo->prepare("SELECT COALESCE(SUM(CASE WHEN type='in' THEN quantity ELSE -quantity END),0) FROM stock_movements WHERE item_id = ? AND branch_id = ?");
+                    $q->execute([$iid, $branchId]);
+                    $running -= (int) $q->fetchColumn(); // opening balance
+                    $rows = $pdo->prepare('SELECT id, type, quantity FROM stock_movements WHERE item_id = ? AND branch_id = ? ORDER BY id ASC');
+                    $rows->execute([$iid, $branchId]);
+                    $ub = $pdo->prepare('UPDATE stock_movements SET balance_after = ? WHERE id = ?');
+                    foreach ($rows->fetchAll() as $m) {
+                        $running += ($m['type'] === 'in' ? 1 : -1) * (int) $m['quantity'];
+                        $ub->execute([$running, (int) $m['id']]);
+                    }
+                }
+                $pdo->commit();
+            } catch (Throwable $e) { $pdo->rollBack(); }
+        }
+        // Preserve the history filter on redirect so the user stays on the same view.
+        $hp = in_array($_POST['hp'] ?? '', ['day', 'month', 'year'], true) ? $_POST['hp'] : 'day';
+        $hv = preg_replace('/[^0-9\-]/', '', (string) ($_POST['hv'] ?? ''));
+        header('Location: stock.php?hp=' . $hp . '&hv=' . urlencode($hv) . '&msg=mv_edited');
+        exit;
+    }
+
     // Validate the movement date (default: today).
     $dateIn = (string) ($_POST['movement_date'] ?? '');
     $d = DateTime::createFromFormat('Y-m-d', $dateIn);
@@ -106,55 +146,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 /* Items for the selected branch (custom order + grouping). */
 $items = [];
 if (!$noBranch && $selectedBranch) {
-    $st = $pdo->prepare('SELECT * FROM items WHERE branch_id = ? ORDER BY sort_order ASC, name ASC');
+    $st = $pdo->prepare('SELECT * FROM items WHERE branch_id = ? ORDER BY category ASC, sort_order ASC, name ASC');
     $st->execute([$selectedBranch]);
     $items = $st->fetchAll();
 }
 
-/* View date — read-only roles can pick a date to review (default today). */
-$viewDate = date('Y-m-d');
-if (!$canEdit && isset($_GET['d'])) {
-    $dv = DateTime::createFromFormat('Y-m-d', (string) $_GET['d']);
-    if ($dv && $dv->format('Y-m-d') === $_GET['d']) { $viewDate = $_GET['d']; }
+/* Recent Movements — filter by day / month / year (default: by day, today). */
+$histPeriod = in_array($_GET['hp'] ?? '', ['day', 'month', 'year'], true) ? $_GET['hp'] : 'day';
+$histRaw    = trim((string) ($_GET['hv'] ?? ''));
+if ($histPeriod === 'day') {
+    $histVal = preg_match('/^\d{4}-\d{2}-\d{2}$/', $histRaw) ? $histRaw : date('Y-m-d');
+    $hFrom   = $hTo = $histVal;
+} elseif ($histPeriod === 'month') {
+    $histVal = preg_match('/^\d{4}-\d{2}$/', $histRaw) ? $histRaw : date('Y-m');
+    $hFrom   = $histVal . '-01';
+    $hTo     = date('Y-m-t', strtotime($hFrom));
+} else { // year
+    $histVal = preg_match('/^\d{4}$/', $histRaw) ? $histRaw : date('Y');
+    $hFrom   = $histVal . '-01-01';
+    $hTo     = $histVal . '-12-31';
 }
 
-/* Read-only roles: per-item Stock In / Out totals recorded on the view date. */
-$dayIn = $dayOut = [];
-if (!$canEdit && !$noBranch && $selectedBranch) {
-    $st = $pdo->prepare('SELECT item_id, type, SUM(quantity) AS qty FROM stock_movements WHERE branch_id = ? AND movement_date = ? GROUP BY item_id, type');
-    $st->execute([$selectedBranch, $viewDate]);
-    foreach ($st->fetchAll() as $r) {
-        if ($r['type'] === 'in') { $dayIn[(int) $r['item_id']] = (int) $r['qty']; }
-        else { $dayOut[(int) $r['item_id']] = (int) $r['qty']; }
-    }
-}
-
-/* Movement history. Editors see recent 25; read-only roles see the chosen date. */
 $history = [];
 if (!$noBranch && $selectedBranch) {
-    if (!$canEdit) {
-        $st = $pdo->prepare(
-            'SELECT m.type, m.quantity, m.balance_after, m.movement_date, m.created_at, i.name
-             FROM stock_movements m JOIN items i ON i.id = m.item_id
-             WHERE m.branch_id = ? AND m.movement_date = ? ORDER BY m.id DESC'
-        );
-        $st->execute([$selectedBranch, $viewDate]);
-    } else {
-        $st = $pdo->prepare(
-            'SELECT m.type, m.quantity, m.balance_after, m.movement_date, m.created_at, i.name
-             FROM stock_movements m JOIN items i ON i.id = m.item_id
-             WHERE m.branch_id = ? ORDER BY m.id DESC LIMIT 25'
-        );
-        $st->execute([$selectedBranch]);
-    }
+    $st = $pdo->prepare(
+        'SELECT m.id, m.item_id, m.type, m.quantity, m.balance_after, m.movement_date, i.name
+         FROM stock_movements m JOIN items i ON i.id = m.item_id
+         WHERE m.branch_id = ? AND m.movement_date BETWEEN ? AND ?
+         ORDER BY m.id DESC LIMIT 500'
+    );
+    $st->execute([$selectedBranch, $hFrom, $hTo]);
     $history = $st->fetchAll();
 }
 
 $flashMap = [
-    'saved'  => ['stock_saved',     'green'],
-    'none'   => ['stock_nothing',   'red'],
-    'denied' => ['inv_not_allowed', 'red'],
-    'frozen' => ['stock_frozen',    'red'],
+    'saved'     => ['stock_saved',     'green'],
+    'none'      => ['stock_nothing',   'red'],
+    'mv_edited' => ['stock_mv_edited',  'green'],
+    'denied'    => ['inv_not_allowed', 'red'],
+    'frozen'    => ['stock_frozen',    'red'],
 ];
 $flash = $flashMap[$_GET['msg'] ?? ''] ?? null;
 
@@ -225,8 +255,20 @@ require __DIR__ . '/includes/header.php';
             </form>
         <?php endif; ?>
 
+        <!-- Add Stock In/Out toggle (collapsed by default for the branch operator) -->
+        <?php if ($canEdit): ?>
+            <div class="mt-6">
+                <button type="button" id="toggleStockEntry" onclick="toggleStockEntry()"
+                        data-open="<?= e(__('stock_add_btn')) ?>" data-close="<?= e(__('btn_cancel')) ?>"
+                        class="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-600/20">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                    <span id="toggleStockLabel"><?= e(__('stock_add_btn')) ?></span>
+                </button>
+            </div>
+        <?php endif; ?>
+
         <!-- Stock movement table — editable for account_user; read-only with date filter for others -->
-        <form method="<?= $canEdit ? 'post' : 'get' ?>" action="stock.php" class="mt-4">
+        <form method="<?= $canEdit ? 'post' : 'get' ?>" action="stock.php" class="mt-2">
             <?php if ($canEdit): ?>
                 <?= csrf_field() ?>
                 <input type="hidden" name="branch_id" value="<?= (int) $selectedBranch ?>">
@@ -234,24 +276,19 @@ require __DIR__ . '/includes/header.php';
                 <input type="hidden" name="branch" value="<?= (int) $selectedBranch ?>">
             <?php endif; ?>
 
-            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 transition-colors">
+            <div id="stockEntryCard" class="<?= $canEdit ? 'hidden ' : '' ?>bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 transition-colors">
+                <?php if ($canEdit): ?>
                 <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 sm:p-5 border-b border-gray-100 dark:border-gray-700">
                     <div class="flex items-center gap-2">
                         <label for="movement_date" class="text-sm font-medium text-gray-700 dark:text-gray-300"><?= e(__('label_date')) ?>:</label>
-                        <?php if ($canEdit): ?>
-                            <input type="date" id="movement_date" name="movement_date" value="<?= e(date('Y-m-d')) ?>"
-                                   class="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition">
-                        <?php else: ?>
-                            <input type="date" id="movement_date" name="d" value="<?= e($viewDate) ?>" onchange="this.form.submit()"
-                                   class="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition">
-                        <?php endif; ?>
+                        <input type="date" id="movement_date" name="movement_date" value="<?= e(date('Y-m-d')) ?>"
+                               class="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition">
                     </div>
-                    <?php if ($canEdit): ?>
-                        <button type="submit" class="px-5 py-2.5 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-600/20">
-                            <?= e(__('btn_apply')) ?>
-                        </button>
-                    <?php endif; ?>
+                    <button type="submit" class="px-5 py-2.5 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-600/20">
+                        <?= e(__('btn_apply')) ?>
+                    </button>
                 </div>
+                <?php endif; ?>
 
                 <div class="overflow-x-auto">
                     <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm">
@@ -284,12 +321,10 @@ require __DIR__ . '/includes/header.php';
                                         <td class="px-4 py-2.5 text-right text-gray-700 dark:text-gray-300 cur-bal" data-bal="<?= $bal ?>"><?= e($bal) ?></td>
                                         <td class="px-4 py-2.5 text-center">
                                             <input type="number" min="0" name="si[<?= (int) $item['id'] ?>]" placeholder="0" <?= $canEdit ? '' : 'disabled' ?>
-                                                   value="<?= !$canEdit && !empty($dayIn[(int) $item['id']]) ? (int) $dayIn[(int) $item['id']] : '' ?>"
                                                    class="si-in w-20 text-center rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white px-2 py-1.5 focus:ring-2 focus:ring-green-500 outline-none transition disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed dark:disabled:bg-gray-800/60">
                                         </td>
                                         <td class="px-4 py-2.5 text-center">
                                             <input type="number" min="0" name="so[<?= (int) $item['id'] ?>]" placeholder="0" <?= $canEdit ? '' : 'disabled' ?>
-                                                   value="<?= !$canEdit && !empty($dayOut[(int) $item['id']]) ? (int) $dayOut[(int) $item['id']] : '' ?>"
                                                    class="so-in w-20 text-center rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white px-2 py-1.5 focus:ring-2 focus:ring-red-500 outline-none transition disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed dark:disabled:bg-gray-800/60">
                                         </td>
                                         <td class="px-4 py-2.5 text-right font-semibold text-gray-900 dark:text-white new-bal"><?= e($bal) ?></td>
@@ -302,52 +337,92 @@ require __DIR__ . '/includes/header.php';
             </div>
         </form>
 
-        <!-- Recent movement history -->
-        <?php if ($history): ?>
-            <div class="mt-8">
-                <h2 class="font-semibold text-gray-900 dark:text-white mb-3"><?= e(__('stock_history')) ?><?php if (!$canEdit): ?> &middot; <?= e(date('d/m/Y', strtotime($viewDate))) ?><?php endif; ?></h2>
-                <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden transition-colors">
-                    <div class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm">
-                            <thead class="bg-gray-50 dark:bg-gray-900/50">
-                                <tr class="text-left text-gray-500 dark:text-gray-400">
-                                    <th class="px-4 py-3 font-semibold"><?= e(__('label_date')) ?></th>
-                                    <th class="px-4 py-3 font-semibold"><?= e(__('col_name')) ?></th>
-                                    <th class="px-4 py-3 font-semibold"><?= e(__('col_type')) ?></th>
-                                    <th class="px-4 py-3 font-semibold text-right"><?= e(__('col_qty')) ?></th>
-                                    <th class="px-4 py-3 font-semibold text-right"><?= e(__('col_balance')) ?></th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+        <!-- Recent movements — filter by day / month / year (default: today) -->
+        <div class="mt-8">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+                <h2 class="font-semibold text-gray-900 dark:text-white"><?= e(__('stock_history')) ?></h2>
+                <form method="get" action="stock.php" class="flex flex-wrap items-center gap-2">
+                    <?php if ($seesAll): ?><input type="hidden" name="branch" value="<?= (int) $selectedBranch ?>"><?php endif; ?>
+                    <select name="hp" onchange="this.form.submit()" class="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition">
+                        <option value="day"   <?= $histPeriod === 'day'   ? 'selected' : '' ?>><?= e(__('rep_by_day')) ?></option>
+                        <option value="month" <?= $histPeriod === 'month' ? 'selected' : '' ?>><?= e(__('rep_by_month')) ?></option>
+                        <option value="year"  <?= $histPeriod === 'year'  ? 'selected' : '' ?>><?= e(__('rep_by_year')) ?></option>
+                    </select>
+                    <?php if ($histPeriod === 'day'): ?>
+                        <input type="date" name="hv" value="<?= e($histVal) ?>" onchange="this.form.submit()" class="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition">
+                    <?php elseif ($histPeriod === 'month'): ?>
+                        <input type="month" name="hv" value="<?= e($histVal) ?>" onchange="this.form.submit()" class="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition">
+                    <?php else: ?>
+                        <input type="number" name="hv" value="<?= e($histVal) ?>" min="2000" max="2100" onchange="this.form.submit()" class="w-28 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition">
+                    <?php endif; ?>
+                </form>
+            </div>
+            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden transition-colors">
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm">
+                        <thead class="bg-gray-50 dark:bg-gray-900/50">
+                            <tr class="text-left text-gray-500 dark:text-gray-400">
+                                <th class="px-4 py-3 font-semibold"><?= e(__('label_date')) ?></th>
+                                <th class="px-4 py-3 font-semibold"><?= e(__('col_name')) ?></th>
+                                <th class="px-4 py-3 font-semibold"><?= e(__('col_type')) ?></th>
+                                <th class="px-4 py-3 font-semibold text-right"><?= e(__('col_qty')) ?></th>
+                                <th class="px-4 py-3 font-semibold text-right"><?= e(__('col_balance')) ?></th>
+                                <?php if ($canEdit): ?><th class="px-4 py-3 font-semibold text-right"><?= e(__('col_actions')) ?></th><?php endif; ?>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                            <?php if (!$history): ?>
+                                <tr><td colspan="<?= $canEdit ? 6 : 5 ?>" class="px-4 py-10 text-center text-gray-500 dark:text-gray-400"><?= e(__('rep_none')) ?></td></tr>
+                            <?php else: ?>
                                 <?php foreach ($history as $h): $isIn = $h['type'] === 'in'; ?>
                                     <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors">
                                         <td class="px-4 py-2.5 text-gray-500 dark:text-gray-400"><?= e(date('d/m/Y', strtotime($h['movement_date']))) ?></td>
                                         <td class="px-4 py-2.5 font-medium text-gray-900 dark:text-white"><?= e($h['name']) ?></td>
                                         <td class="px-4 py-2.5">
-                                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold
-                                                <?= $isIn
-                                                    ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
-                                                    : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' ?>">
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold <?= $isIn ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' ?>">
                                                 <?= $isIn ? e(__('type_in')) : e(__('type_out')) ?>
                                             </span>
                                         </td>
-                                        <td class="px-4 py-2.5 text-right <?= $isIn ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400' ?>">
-                                            <?= $isIn ? '+' : '−' ?><?= e($h['quantity']) ?>
-                                        </td>
+                                        <td class="px-4 py-2.5 text-right <?= $isIn ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400' ?>"><?= $isIn ? '+' : '−' ?><?= e($h['quantity']) ?></td>
                                         <td class="px-4 py-2.5 text-right font-semibold text-gray-900 dark:text-white"><?= e($h['balance_after']) ?></td>
+                                        <?php if ($canEdit): ?>
+                                            <td class="px-4 py-2.5 text-right">
+                                                <form method="post" action="stock.php" class="inline"
+                                                      onsubmit="var q=prompt('<?= e(__('stock_edit_prompt')) ?>','<?= (int) $h['quantity'] ?>'); if(q===null){return false;} q=parseInt(q,10); if(isNaN(q)||q<1){alert('<?= e(__('stock_edit_invalid')) ?>');return false;} this.mv_qty.value=q;">
+                                                    <?= csrf_field() ?>
+                                                    <input type="hidden" name="action" value="edit_movement">
+                                                    <input type="hidden" name="mv_id" value="<?= (int) $h['id'] ?>">
+                                                    <input type="hidden" name="mv_qty" value="">
+                                                    <input type="hidden" name="hp" value="<?= e($histPeriod) ?>">
+                                                    <input type="hidden" name="hv" value="<?= e($histVal) ?>">
+                                                    <button type="submit" class="px-2.5 py-1 rounded-lg text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors"><?= e(__('btn_edit')) ?></button>
+                                                </form>
+                                            </td>
+                                        <?php endif; ?>
                                     </tr>
                                 <?php endforeach; ?>
-                            </tbody>
-                        </table>
-                    </div>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
                 </div>
             </div>
-        <?php endif; ?>
+        </div>
 
     <?php endif; ?>
 </section>
 
 <script>
+    // Collapse / expand the Stock In/Out entry card.
+    function toggleStockEntry() {
+        var c = document.getElementById('stockEntryCard');
+        var b = document.getElementById('toggleStockEntry');
+        var lbl = document.getElementById('toggleStockLabel');
+        if (!c) { return; }
+        var nowHidden = c.classList.toggle('hidden');
+        if (lbl && b) { lbl.textContent = nowHidden ? b.dataset.open : b.dataset.close; }
+        if (!nowHidden) { c.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+    }
+
     // Live "new balance" = current + IN − OUT.
     document.querySelectorAll('#movement_date') && document.addEventListener('input', function (ev) {
         var t = ev.target;

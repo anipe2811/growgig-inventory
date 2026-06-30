@@ -44,7 +44,7 @@ $stmt = $pdo->prepare(
     "SELECT i.name, i.category, i.price, b.name AS branch,
             SUM(CASE WHEN m.type = 'out' THEN m.quantity ELSE -m.quantity END) AS qty_out
      FROM stock_movements m JOIN items i ON i.id = m.item_id LEFT JOIN branches b ON b.id = m.branch_id
-     $where GROUP BY m.item_id HAVING qty_out > 0 ORDER BY b.name ASC, i.sort_order ASC, i.name ASC"
+     $where GROUP BY m.item_id HAVING qty_out > 0 ORDER BY b.name ASC, i.category ASC, i.sort_order ASC, i.name ASC"
 );
 $stmt->execute($params);
 $rows = $stmt->fetchAll();

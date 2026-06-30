@@ -72,6 +72,10 @@ $LANG = [
         'stock_saved'          => 'Stock updated successfully.',
         'stock_nothing'        => 'Enter at least one quantity (In or Out).',
         'stock_history'        => 'Recent Movements',
+        'stock_add_btn'        => 'Add Stock In / Out',
+        'stock_mv_edited'      => 'Movement updated; balances recalculated.',
+        'stock_edit_prompt'    => 'New quantity for this movement:',
+        'stock_edit_invalid'   => 'Enter a whole number of 1 or more.',
         'readonly'             => 'Read-only',
         // Mobile stock (on-the-go therapist trips)
         'nav_mobile'           => 'Mobile Stock',
@@ -631,6 +635,10 @@ $LANG = [
         'stock_saved'          => 'Stok berjaya dikemas kini.',
         'stock_nothing'        => 'Masukkan sekurang-kurangnya satu kuantiti (Masuk atau Keluar).',
         'stock_history'        => 'Pergerakan Terkini',
+        'stock_add_btn'        => 'Tambah Stok Masuk / Keluar',
+        'stock_mv_edited'      => 'Pergerakan dikemas kini; baki dikira semula.',
+        'stock_edit_prompt'    => 'Kuantiti baharu untuk pergerakan ini:',
+        'stock_edit_invalid'   => 'Masukkan nombor bulat 1 atau lebih.',
         'readonly'             => 'Baca-sahaja',
         // Stok mudah alih (perjalanan terapis on-the-go)
         'nav_mobile'           => 'Stok Mudah Alih',

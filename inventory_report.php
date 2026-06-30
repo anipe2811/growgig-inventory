@@ -25,7 +25,7 @@ $pi = $scopeBranch ? [$scopeBranch] : [];
 $stmt = $pdo->prepare(
     "SELECT i.name, i.category, i.quantity, i.unit, i.reorder_level, i.price, b.name AS branch
      FROM items i LEFT JOIN branches b ON b.id = i.branch_id $wi
-     ORDER BY b.name ASC, i.sort_order ASC, i.name ASC"
+     ORDER BY b.name ASC, i.category ASC, i.sort_order ASC, i.name ASC"
 );
 $stmt->execute($pi);
 $rows = $stmt->fetchAll();

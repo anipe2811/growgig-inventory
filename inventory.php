@@ -149,7 +149,7 @@ if (!$noBranch) {
         $where = 'WHERE i.branch_id = ?';
         $params[] = $filterBranch;
     }
-    $sql  = "SELECT i.*, b.name AS branch_name FROM items i LEFT JOIN branches b ON b.id = i.branch_id $where ORDER BY b.name ASC, i.sort_order ASC, i.name ASC";
+    $sql  = "SELECT i.*, b.name AS branch_name FROM items i LEFT JOIN branches b ON b.id = i.branch_id $where ORDER BY b.name ASC, i.category ASC, i.sort_order ASC, i.name ASC";
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
     $items = $stmt->fetchAll();

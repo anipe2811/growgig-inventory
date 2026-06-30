@@ -122,18 +122,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
 
-            $ins = $pdo->prepare('INSERT INTO mobile_trips (branch_id, therapist_name, status, note, trip_date, created_by) VALUES (?, ?, "open", ?, ?, ?)');
-            $ins->execute([$branchId, $therapist, $note !== '' ? $note : null, $tripDate, $_SESSION['user_id']]);
-            $tripId = (int) $pdo->lastInsertId();
+            // Merge into an existing OPEN trip for the same therapist + same date (same
+            // branch); otherwise start a new trip. Same date = one group, different date = separate.
+            $find = $pdo->prepare('SELECT id FROM mobile_trips WHERE branch_id = ? AND status = "open" AND therapist_name = ? AND trip_date = ? ORDER BY id DESC LIMIT 1 FOR UPDATE');
+            $find->execute([$branchId, $therapist, $tripDate]);
+            $tripId = (int) ($find->fetchColumn() ?: 0);
+            if ($tripId === 0) {
+                $ins = $pdo->prepare('INSERT INTO mobile_trips (branch_id, therapist_name, status, note, trip_date, created_by) VALUES (?, ?, "open", ?, ?, ?)');
+                $ins->execute([$branchId, $therapist, $note !== '' ? $note : null, $tripDate, $_SESSION['user_id']]);
+                $tripId = (int) $pdo->lastInsertId();
+            } elseif ($note !== '') {
+                // Append any new note to the existing trip.
+                $pdo->prepare('UPDATE mobile_trips SET note = TRIM(CONCAT(COALESCE(note, ""), " ", ?)) WHERE id = ?')->execute([$note, $tripId]);
+            }
 
-            $line = $pdo->prepare('INSERT INTO mobile_trip_items (trip_id, item_id, qty_taken, qty_sold, qty_returned, unit_price) VALUES (?, ?, ?, 0, 0, ?)');
+            // Existing lines for this trip, keyed by item, so re-takes merge instead of duplicating.
+            $exg = $pdo->prepare('SELECT id, item_id FROM mobile_trip_items WHERE trip_id = ?');
+            $exg->execute([$tripId]);
+            $lineByItem = [];
+            foreach ($exg->fetchAll() as $r) { $lineByItem[(int) $r['item_id']] = (int) $r['id']; }
+
+            $insLine = $pdo->prepare('INSERT INTO mobile_trip_items (trip_id, item_id, qty_taken, qty_sold, qty_returned, unit_price) VALUES (?, ?, ?, 0, 0, ?)');
+            $addQty  = $pdo->prepare('UPDATE mobile_trip_items SET qty_taken = qty_taken + ? WHERE id = ?');
             foreach ($lines as $id => $q) {
                 $dec->execute([$q, $id, $branchId, $q]);
                 if ($dec->rowCount() === 0) { throw new RuntimeException('insufficient'); } // lost a race
                 $get->execute([$id, $branchId]);
                 $bal = (int) $get->fetchColumn();
                 $mv->execute([$id, $branchId, 'out', $q, $bal, $tripDate, $_SESSION['user_id'], $tripId]);
-                $line->execute([$tripId, $id, $q, $cur[$id]['price']]);
+                if (isset($lineByItem[$id])) {
+                    $addQty->execute([$q, $lineByItem[$id]]);
+                } else {
+                    $insLine->execute([$tripId, $id, $q, $cur[$id]['price']]);
+                    $lineByItem[$id] = (int) $pdo->lastInsertId();
+                }
             }
             $pdo->commit();
             header('Location: mobile.php?msg=saved');
@@ -217,7 +239,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 /* Items for the "take stock" table. */
 $items = [];
 if (!$noBranch && $selectedBranch) {
-    $st = $pdo->prepare('SELECT id, name, category, quantity, price FROM items WHERE branch_id = ? ORDER BY sort_order ASC, name ASC');
+    $st = $pdo->prepare('SELECT id, name, category, quantity, price FROM items WHERE branch_id = ? ORDER BY category ASC, sort_order ASC, name ASC');
     $st->execute([$selectedBranch]);
     $items = $st->fetchAll();
 }

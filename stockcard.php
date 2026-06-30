@@ -43,7 +43,7 @@ for ($d = 1; $d <= $daysInMonth; $d++) { $days[] = sprintf('%s-%02d', $monthRaw,
 /* Build the matrix: each item -> opening + per-day [si, so, bal]. */
 $rows = [];
 if ($branch) {
-    $its = $pdo->prepare('SELECT id, name, quantity FROM items WHERE branch_id = ? ORDER BY sort_order ASC, name ASC');
+    $its = $pdo->prepare('SELECT id, name, quantity FROM items WHERE branch_id = ? ORDER BY category ASC, sort_order ASC, name ASC');
     $its->execute([$branch]);
     $items = $its->fetchAll();
 
