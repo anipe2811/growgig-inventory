@@ -229,6 +229,127 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    /* ---- Edit a finished (settled/cancelled) trip: adjust returned/sold, therapist, date. ---- */
+    if ($action === 'edit') {
+        $tripId    = (int) ($_POST['trip_id'] ?? 0);
+        $retIn     = is_array($_POST['returned'] ?? null) ? $_POST['returned'] : [];
+        $therapist = trim((string) ($_POST['therapist_name'] ?? ''));
+        if ($therapist === '') {
+            header('Location: mobile.php?msg=denied');
+            exit;
+        }
+        if (mb_strlen($therapist) > 120) { $therapist = mb_substr($therapist, 0, 120); }
+
+        $rdIn       = (string) ($_POST['return_date'] ?? '');
+        $rd         = DateTime::createFromFormat('Y-m-d', $rdIn);
+        $returnDate = ($rd && $rd->format('Y-m-d') === $rdIn) ? $rdIn : date('Y-m-d');
+
+        $pdo->beginTransaction();
+        try {
+            // Lock the finished trip so a concurrent edit/delete cannot race.
+            $sel = $pdo->prepare('SELECT id FROM mobile_trips WHERE id = ? AND branch_id = ? AND status IN ("settled","cancelled") FOR UPDATE');
+            $sel->execute([$tripId, $branchId]);
+            if (!$sel->fetch()) {
+                $pdo->rollBack();
+                header('Location: mobile.php?msg=denied');
+                exit;
+            }
+
+            $ls = $pdo->prepare('SELECT id, item_id, qty_taken, qty_returned FROM mobile_trip_items WHERE trip_id = ?');
+            $ls->execute([$tripId]);
+
+            // The take ('out') movement is unchanged; only the return ('in') is re-stated per item.
+            $delMv   = $pdo->prepare('DELETE FROM stock_movements WHERE trip_id = ? AND item_id = ? AND type = "in"');
+            $updLine = $pdo->prepare('UPDATE mobile_trip_items SET qty_sold = ?, qty_returned = ? WHERE id = ?');
+
+            foreach ($ls->fetchAll() as $ln) {
+                $lid = (int) $ln['id'];
+                if (!array_key_exists($lid, $retIn)) { continue; } // line not on the form (e.g. deleted item) → leave as-is
+                $iid    = (int) $ln['item_id'];
+                $get->execute([$iid, $branchId]);
+                if ($get->fetch() === false) { continue; }          // item deleted in a race → skip safely
+
+                $taken  = (int) $ln['qty_taken'];
+                $oldRet = (int) $ln['qty_returned'];
+                $newRet = max(0, (int) $retIn[$lid]);
+                if ($newRet > $taken) { $newRet = $taken; }
+                $newSold = $taken - $newRet;
+                $delta   = $newRet - $oldRet;       // change in stock left on hand
+
+                if ($delta > 0) {
+                    $inc->execute([$delta, $iid, $branchId]);
+                } elseif ($delta < 0) {
+                    $need = -$delta;                 // selling more = pulling that stock back out
+                    $dec->execute([$need, $iid, $branchId, $need]);
+                    if ($dec->rowCount() === 0) { throw new RuntimeException('insufficient'); }
+                }
+
+                // Re-state the return movement so the Stock Card / Sales Report stay exact.
+                $delMv->execute([$tripId, $iid]);
+                if ($newRet > 0) {
+                    $get->execute([$iid, $branchId]);
+                    $bal = (int) $get->fetchColumn();
+                    $mv->execute([$iid, $branchId, 'in', $newRet, $bal, $returnDate, $_SESSION['user_id'], $tripId]);
+                }
+                $updLine->execute([$newSold, $newRet, $lid]);
+            }
+
+            // Re-classify: a trip with any sold is "settled", otherwise "cancelled".
+            $sum = $pdo->prepare('SELECT COALESCE(SUM(qty_sold),0) FROM mobile_trip_items WHERE trip_id = ?');
+            $sum->execute([$tripId]);
+            $status = ((int) $sum->fetchColumn() > 0) ? 'settled' : 'cancelled';
+
+            $pdo->prepare('UPDATE mobile_trips SET therapist_name = ?, return_date = ?, status = ?, settled_by = ?, settled_at = NOW() WHERE id = ?')
+                ->execute([$therapist, $returnDate, $status, $_SESSION['user_id'], $tripId]);
+            $pdo->commit();
+            header('Location: mobile.php?msg=edited');
+            exit;
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) { $pdo->rollBack(); }
+            $short = ($e instanceof RuntimeException && $e->getMessage() === 'insufficient');
+            header('Location: mobile.php?msg=' . ($short ? 'insufficient' : 'denied'));
+            exit;
+        }
+    }
+
+    /* ---- Delete a finished trip: reverse its net inventory effect, then remove it. ---- */
+    if ($action === 'delete') {
+        $tripId = (int) ($_POST['trip_id'] ?? 0);
+
+        $pdo->beginTransaction();
+        try {
+            $sel = $pdo->prepare('SELECT id FROM mobile_trips WHERE id = ? AND branch_id = ? AND status IN ("settled","cancelled") FOR UPDATE');
+            $sel->execute([$tripId, $branchId]);
+            if (!$sel->fetch()) {
+                $pdo->rollBack();
+                header('Location: mobile.php?msg=denied');
+                exit;
+            }
+
+            // Net effect of the trip on inventory was -(sold). Undo it by adding sold back.
+            $ls = $pdo->prepare('SELECT item_id, qty_taken, qty_returned FROM mobile_trip_items WHERE trip_id = ?');
+            $ls->execute([$tripId]);
+            foreach ($ls->fetchAll() as $ln) {
+                $iid    = (int) $ln['item_id'];
+                $netOut = (int) $ln['qty_taken'] - (int) $ln['qty_returned']; // = qty sold (>= 0)
+                if ($netOut > 0) {
+                    $inc->execute([$netOut, $iid, $branchId]); // no-op if the item was deleted meanwhile
+                }
+            }
+
+            $pdo->prepare('DELETE FROM stock_movements WHERE trip_id = ?')->execute([$tripId]);
+            $pdo->prepare('DELETE FROM mobile_trip_items WHERE trip_id = ?')->execute([$tripId]);
+            $pdo->prepare('DELETE FROM mobile_trips WHERE id = ?')->execute([$tripId]);
+            $pdo->commit();
+            header('Location: mobile.php?msg=deleted');
+            exit;
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) { $pdo->rollBack(); }
+            header('Location: mobile.php?msg=denied');
+            exit;
+        }
+    }
+
     header('Location: mobile.php?msg=denied');
     exit;
 }
@@ -281,10 +402,26 @@ if (!$noBranch && $selectedBranch) {
     $history = $st->fetchAll();
 }
 
+/* Per-item lines for the history trips (expandable detail view + edit pre-fill). */
+$histLinesByTrip = [];
+if ($history) {
+    $hids = array_map(static fn($h) => (int) $h['id'], $history);
+    $in   = implode(',', array_fill(0, count($hids), '?'));
+    $hls  = $pdo->prepare(
+        "SELECT li.id, li.trip_id, li.item_id, li.qty_taken, li.qty_sold, li.qty_returned, li.unit_price, i.name
+         FROM mobile_trip_items li JOIN items i ON i.id = li.item_id
+         WHERE li.trip_id IN ($in) ORDER BY li.id ASC"
+    );
+    $hls->execute($hids);
+    foreach ($hls->fetchAll() as $r) { $histLinesByTrip[(int) $r['trip_id']][] = $r; }
+}
+
 $flashMap = [
     'saved'        => ['mob_saved',        'green'],
     'settled'      => ['mob_settled',      'green'],
     'cancelled'    => ['mob_cancelled',    'green'],
+    'edited'       => ['mob_edited',       'green'],
+    'deleted'      => ['mob_deleted',      'green'],
     'none'         => ['mob_none',         'red'],
     'insufficient' => ['mob_insufficient', 'red'],
     'denied'       => ['inv_not_allowed',  'red'],
@@ -536,16 +673,22 @@ require __DIR__ . '/includes/header.php';
                                 <th class="px-4 py-3 font-semibold text-right text-blue-600 dark:text-blue-400"><?= e(__('col_returned')) ?></th>
                                 <th class="px-4 py-3 font-semibold text-right text-emerald-600 dark:text-emerald-400"><?= e(__('col_sold')) ?></th>
                                 <th class="px-4 py-3 font-semibold text-right"><?= e(__('mob_value')) ?></th>
+                                <th class="px-4 py-3 font-semibold text-right"><?= e(__('col_actions')) ?></th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
                             <?php if (!$history): ?>
-                                <tr><td colspan="7" class="px-4 py-10 text-center text-gray-500 dark:text-gray-400"><?= e(__('mob_empty_history')) ?></td></tr>
+                                <tr><td colspan="8" class="px-4 py-10 text-center text-gray-500 dark:text-gray-400"><?= e(__('mob_empty_history')) ?></td></tr>
                             <?php else: ?>
-                                <?php foreach ($history as $h): $isCancelled = $h['status'] === 'cancelled'; ?>
+                                <?php foreach ($history as $h):
+                                    $tid         = (int) $h['id'];
+                                    $hlines      = $histLinesByTrip[$tid] ?? [];
+                                    $isCancelled = $h['status'] === 'cancelled';
+                                    $defRet      = $h['return_date'] ?: ($h['settled_at'] ? date('Y-m-d', strtotime($h['settled_at'])) : $h['trip_date']);
+                                ?>
                                     <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors">
                                         <td class="px-4 py-2.5 text-gray-500 dark:text-gray-400">
-                                            <?= e(date('d/m/Y', strtotime($h['return_date'] ?: ($h['settled_at'] ?: $h['trip_date'])))) ?>
+                                            <?= e(date('d/m/Y', strtotime($defRet))) ?>
                                         </td>
                                         <td class="px-4 py-2.5 font-medium text-gray-900 dark:text-white"><?= e($h['therapist_name']) ?></td>
                                         <td class="px-4 py-2.5">
@@ -560,6 +703,108 @@ require __DIR__ . '/includes/header.php';
                                         <td class="px-4 py-2.5 text-right text-blue-600 dark:text-blue-400"><?= (int) $h['returned'] ?></td>
                                         <td class="px-4 py-2.5 text-right text-emerald-600 dark:text-emerald-400"><?= (int) $h['sold'] ?></td>
                                         <td class="px-4 py-2.5 text-right font-semibold text-gray-900 dark:text-white">RM <?= e(number_format((float) $h['value'], 2)) ?></td>
+                                        <td class="px-4 py-2.5 text-right">
+                                            <button type="button" class="hist-toggle inline-flex items-center gap-1 text-indigo-600 dark:text-indigo-400 font-medium hover:underline"
+                                                    data-target="hist-<?= $tid ?>" aria-expanded="false">
+                                                <svg class="hist-chevron w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                                                <?= e(__('mob_details')) ?>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    <tr id="hist-<?= $tid ?>" class="hist-detail hidden bg-gray-50/70 dark:bg-gray-900/40">
+                                        <td colspan="8" class="px-4 py-4">
+                                            <p class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2"><?= e(__('mob_items')) ?></p>
+                                            <?php if ($canEdit): ?>
+                                                <form method="post" action="mobile.php" class="settle-form" onsubmit="return confirm('<?= e(__('mob_confirm_edit')) ?>');">
+                                                    <?= csrf_field() ?>
+                                                    <input type="hidden" name="action" value="edit">
+                                                    <input type="hidden" name="trip_id" value="<?= $tid ?>">
+                                                    <div class="flex flex-wrap items-end gap-3 mb-3">
+                                                        <div>
+                                                            <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"><?= e(__('mob_therapist')) ?></label>
+                                                            <input type="text" name="therapist_name" value="<?= e($h['therapist_name']) ?>" required maxlength="120"
+                                                                   class="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition">
+                                                        </div>
+                                                        <div>
+                                                            <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"><?= e(__('mob_return_date')) ?></label>
+                                                            <input type="date" name="return_date" value="<?= e(date('Y-m-d', strtotime($defRet))) ?>"
+                                                                   class="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition">
+                                                        </div>
+                                                    </div>
+                                                    <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                                                        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm bg-white dark:bg-gray-800">
+                                                            <thead class="bg-gray-50 dark:bg-gray-900/50">
+                                                                <tr class="text-left text-gray-500 dark:text-gray-400">
+                                                                    <th class="px-4 py-2 font-semibold"><?= e(__('col_name')) ?></th>
+                                                                    <th class="px-4 py-2 font-semibold text-right"><?= e(__('col_taken')) ?></th>
+                                                                    <th class="px-4 py-2 font-semibold text-center text-blue-600 dark:text-blue-400"><?= e(__('col_returned')) ?></th>
+                                                                    <th class="px-4 py-2 font-semibold text-right text-emerald-600 dark:text-emerald-400"><?= e(__('col_sold')) ?></th>
+                                                                    <th class="px-4 py-2 font-semibold text-right"><?= e(__('mob_value')) ?></th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                                                                <?php foreach ($hlines as $ln): $tk = (int) $ln['qty_taken']; $rt = (int) $ln['qty_returned']; $sd = (int) $ln['qty_sold']; ?>
+                                                                    <tr>
+                                                                        <td class="px-4 py-2 font-medium text-gray-900 dark:text-white"><?= e($ln['name']) ?></td>
+                                                                        <td class="px-4 py-2 text-right text-gray-700 dark:text-gray-300 taken-cell" data-taken="<?= $tk ?>"><?= $tk ?></td>
+                                                                        <td class="px-4 py-2 text-center">
+                                                                            <input type="number" min="0" max="<?= $tk ?>" name="returned[<?= (int) $ln['id'] ?>]" value="<?= $rt ?>"
+                                                                                   class="ret-in w-20 text-center rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white px-2 py-1.5 focus:ring-2 focus:ring-blue-500 outline-none transition">
+                                                                        </td>
+                                                                        <td class="px-4 py-2 text-right font-semibold text-emerald-600 dark:text-emerald-400 sold-cell"><?= $sd ?></td>
+                                                                        <td class="px-4 py-2 text-right font-semibold text-gray-900 dark:text-white val-cell" data-price="<?= (float) $ln['unit_price'] ?>">RM <?= e(number_format($sd * (float) $ln['unit_price'], 2)) ?></td>
+                                                                    </tr>
+                                                                <?php endforeach; ?>
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                    <div class="flex flex-wrap items-center justify-end gap-3 mt-3">
+                                                        <button type="submit"
+                                                                class="px-5 py-2.5 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-600/20">
+                                                            <?= e(__('mob_save_changes')) ?>
+                                                        </button>
+                                                    </div>
+                                                </form>
+                                                <form method="post" action="mobile.php" class="mt-2 flex justify-end" onsubmit="return confirm('<?= e(__('mob_confirm_delete')) ?>');">
+                                                    <?= csrf_field() ?>
+                                                    <input type="hidden" name="action" value="delete">
+                                                    <input type="hidden" name="trip_id" value="<?= $tid ?>">
+                                                    <button type="submit"
+                                                            class="px-4 py-2.5 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 font-medium hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors">
+                                                        <?= e(__('mob_delete_trip')) ?>
+                                                    </button>
+                                                </form>
+                                            <?php else: ?>
+                                                <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                                                    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm bg-white dark:bg-gray-800">
+                                                        <thead class="bg-gray-50 dark:bg-gray-900/50">
+                                                            <tr class="text-left text-gray-500 dark:text-gray-400">
+                                                                <th class="px-4 py-2 font-semibold"><?= e(__('col_name')) ?></th>
+                                                                <th class="px-4 py-2 font-semibold text-right"><?= e(__('col_taken')) ?></th>
+                                                                <th class="px-4 py-2 font-semibold text-right text-blue-600 dark:text-blue-400"><?= e(__('col_returned')) ?></th>
+                                                                <th class="px-4 py-2 font-semibold text-right text-emerald-600 dark:text-emerald-400"><?= e(__('col_sold')) ?></th>
+                                                                <th class="px-4 py-2 font-semibold text-right"><?= e(__('mob_value')) ?></th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                                                            <?php if (!$hlines): ?>
+                                                                <tr><td colspan="5" class="px-4 py-6 text-center text-gray-500 dark:text-gray-400">&mdash;</td></tr>
+                                                            <?php else: ?>
+                                                                <?php foreach ($hlines as $ln): $sd = (int) $ln['qty_sold']; ?>
+                                                                    <tr>
+                                                                        <td class="px-4 py-2 font-medium text-gray-900 dark:text-white"><?= e($ln['name']) ?></td>
+                                                                        <td class="px-4 py-2 text-right text-gray-700 dark:text-gray-300"><?= (int) $ln['qty_taken'] ?></td>
+                                                                        <td class="px-4 py-2 text-right text-blue-600 dark:text-blue-400"><?= (int) $ln['qty_returned'] ?></td>
+                                                                        <td class="px-4 py-2 text-right text-emerald-600 dark:text-emerald-400"><?= $sd ?></td>
+                                                                        <td class="px-4 py-2 text-right font-semibold text-gray-900 dark:text-white">RM <?= e(number_format($sd * (float) $ln['unit_price'], 2)) ?></td>
+                                                                    </tr>
+                                                                <?php endforeach; ?>
+                                                            <?php endif; ?>
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            <?php endif; ?>
+                                        </td>
                                     </tr>
                                 <?php endforeach; ?>
                             <?php endif; ?>
@@ -610,6 +855,18 @@ require __DIR__ . '/includes/header.php';
     // Initialise the "sold" / value cells on load (returned defaults to 0 → sold = taken).
     document.querySelectorAll('.settle-form .ret-in').forEach(function (inp) {
         inp.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    // Trip-history: expand / collapse the per-item detail (+ edit) row.
+    document.querySelectorAll('.hist-toggle').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var row = document.getElementById(btn.dataset.target);
+            if (!row) { return; }
+            var open = row.classList.toggle('hidden') === false;
+            btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+            var chev = btn.querySelector('.hist-chevron');
+            if (chev) { chev.style.transform = open ? 'rotate(180deg)' : ''; }
+        });
     });
 </script>
 

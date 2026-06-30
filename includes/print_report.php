@@ -87,7 +87,8 @@ function render_print_report(string $title, array $metaLines, string $tableHtml,
     table.rpt .r { text-align: right; }
     table.rpt .c { text-align: center; }
     table.rpt tfoot .tot td { font-weight: 700; background: #eef2ff; border-top: 2px solid #c7d2fe; }
-    .foot { margin-top: 22px; color: #9ca3af; font-size: 11px; text-align: center; }
+    .foot { margin-top: 22px; color: #9ca3af; font-size: 11px; text-align: center; line-height: 1.6; }
+    .foot .gis { color: #6366f1; font-weight: 600; }
     @media print { .bar { display: none; } body { padding: 0; } }
 </style>
 </head>
@@ -103,7 +104,10 @@ function render_print_report(string $title, array $metaLines, string $tableHtml,
     <?php endforeach; ?>
     <div class="meta"><?= e(__('rep_generated')) ?>: <?= e($gen) ?></div>
     <?= $tableHtml ?>
-    <div class="foot"><?= e($brand['nav_name']) ?> &middot; <?= e($title) ?></div>
+    <div class="foot">
+        <?= e($brand['nav_name']) ?> &middot; <?= e($title) ?><br>
+        <span class="gis"><?= e(__('rep_gis')) ?></span>
+    </div>
     <script>window.addEventListener('load', function () { setTimeout(function () { window.print(); }, 300); });</script>
 </body>
 </html><?php
