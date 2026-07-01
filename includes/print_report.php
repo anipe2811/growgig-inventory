@@ -117,6 +117,17 @@ function render_print_report(string $title, array $metaLines, string $tableHtml,
     }
     table.rpt .r { text-align: right; }
     table.rpt .c { text-align: center; }
+    /* Stock Card: green stock-in / red stock-out text, and a solid red cell for
+       zero / out-of-stock balances (mirrors the on-screen matrix). */
+    table.rpt td.si { color: #059669; }
+    table.rpt td.so { color: #dc2626; }
+    table.rpt td.z {
+        background: #ef4444 !important;
+        color: #fff !important;
+        font-weight: 700;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
     table.rpt tfoot .tot td {
         font-weight: 700;
         background: #eef2ff;

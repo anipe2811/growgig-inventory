@@ -94,17 +94,32 @@ if (($_GET['export'] ?? '') === 'pdf') {
     if (!$rows) {
         $tbl = '<p style="margin-top:16px;color:#6b7280">' . e(__('inv_empty')) . '</p>';
     } else {
-        $tbl  = '<table class="rpt"><thead><tr>';
-        $tbl .= '<th rowspan="2">' . e(__('sc_item')) . '</th><th rowspan="2" class="r">' . e(__('sc_inhand')) . '</th>';
-        foreach ($activeDays as $di) { $tbl .= '<th colspan="3" class="c">' . e(date('d/m', strtotime($days[$di]))) . '</th>'; }
-        $tbl .= '</tr><tr>';
-        foreach ($activeDays as $di) { $tbl .= '<th class="c">SI</th><th class="c">SO</th><th class="c">BAL</th>'; }
-        $tbl .= '</tr></thead><tbody>';
+        // A month with no movement has no per-day columns; show a single dated
+        // balance snapshot ("as of" today, or month-end for a past month) so the
+        // Stock Card is never dateless.
+        $noMove = !$activeDays;
+        $today  = date('Y-m-d');
+        $asOf   = ($today >= $start && $today <= $end) ? $today : $end;
+        $asOfL  = e(date('d/m/Y', strtotime($asOf)));
+
+        $tbl = '<table class="rpt"><thead>';
+        if ($noMove) {
+            $tbl .= '<tr><th>' . e(__('sc_item')) . '</th><th class="r">' . e(__('sc_inhand')) . ' (' . $asOfL . ')</th></tr>';
+        } else {
+            $tbl .= '<tr><th rowspan="2">' . e(__('sc_item')) . '</th><th rowspan="2" class="r">' . e(__('sc_inhand')) . '</th>';
+            foreach ($activeDays as $di) { $tbl .= '<th colspan="3" class="c">' . e(date('d/m', strtotime($days[$di]))) . '</th>'; }
+            $tbl .= '</tr><tr>';
+            foreach ($activeDays as $di) { $tbl .= '<th class="c">SI</th><th class="c">SO</th><th class="c">BAL</th>'; }
+            $tbl .= '</tr>';
+        }
+        $tbl .= '</thead><tbody>';
         foreach ($rows as $row) {
-            $tbl .= '<tr><td>' . e($row['name']) . '</td><td class="r">' . (int) $row['opening'] . '</td>';
+            $openZ = (int) $row['opening'] <= 0 ? ' z' : '';
+            $tbl .= '<tr><td>' . e($row['name']) . '</td><td class="r' . $openZ . '">' . (int) $row['opening'] . '</td>';
             foreach ($activeDays as $di) {
-                $c = $row['cells'][$di];
-                $tbl .= '<td class="c">' . ($c['si'] ?: '') . '</td><td class="c">' . ($c['so'] ?: '') . '</td><td class="c">' . (int) $c['bal'] . '</td>';
+                $c    = $row['cells'][$di];
+                $balZ = (int) $c['bal'] <= 0 ? ' z' : '';
+                $tbl .= '<td class="c si">' . ($c['si'] ?: '') . '</td><td class="c so">' . ($c['so'] ?: '') . '</td><td class="c' . $balZ . '">' . (int) $c['bal'] . '</td>';
             }
             $tbl .= '</tr>';
         }
