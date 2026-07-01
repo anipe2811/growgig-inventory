@@ -69,27 +69,73 @@ function render_print_report(string $title, array $metaLines, string $tableHtml,
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title><?= e($title) ?></title>
 <style>
-    @page { size: A4 <?= $land ? 'landscape' : 'portrait' ?>; margin: 14mm; }
+    @page { size: A4 <?= $land ? 'landscape' : 'portrait' ?>; margin: 12mm; }
     * { box-sizing: border-box; }
-    body { font-family: 'Segoe UI', Roboto, Arial, sans-serif; color: #111827; margin: 0; padding: 28px; background: #fff; }
-    .bar { display: flex; justify-content: flex-end; margin-bottom: 18px; }
-    .btn { background: #4f46e5; color: #fff; border: 0; padding: 10px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
+    body {
+        font-family: 'Segoe UI', Roboto, Arial, sans-serif;
+        color: #111827;
+        margin: 0;
+        padding: 20px;
+        background: #fff;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+    .bar { display: flex; justify-content: flex-end; margin-bottom: 12px; }
+    .btn { background: #4f46e5; color: #fff; border: 0; padding: 9px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
     .btn:hover { background: #4338ca; }
-    .head { display: flex; align-items: center; gap: 12px; border-bottom: 3px solid #4f46e5; padding-bottom: 12px; }
-    .head img { height: 42px; width: 42px; object-fit: contain; border-radius: 6px; }
-    .brand { font-size: 17px; font-weight: 700; color: #4f46e5; line-height: 1.2; }
-    h1 { font-size: 21px; margin: 16px 0 4px; }
-    .meta { color: #6b7280; font-size: 12px; margin: 1px 0; }
-    table.rpt { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 16px; }
-    table.rpt th { background: #eef2ff; color: #3730a3; text-align: left; padding: 8px 10px; border-bottom: 2px solid #c7d2fe; font-weight: 600; white-space: nowrap; }
-    table.rpt td { padding: 7px 10px; border-bottom: 1px solid #eee; }
-    table.rpt tbody tr:nth-child(even) td { background: #fafafa; }
+    .head { display: flex; align-items: center; gap: 10px; border-bottom: 2.5px solid #4f46e5; padding-bottom: 8px; }
+    .head img { height: 36px; width: 36px; object-fit: contain; border-radius: 6px; }
+    .brand { font-size: 16px; font-weight: 700; color: #4f46e5; line-height: 1.2; }
+    h1 { font-size: 18px; margin: 10px 0 3px; }
+    .meta { color: #6b7280; font-size: 11px; margin: 0.5px 0; line-height: 1.35; }
+    table.rpt {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 10.5px;
+        margin-top: 10px;
+    }
+    table.rpt th {
+        background: #eef2ff;
+        color: #3730a3;
+        text-align: left;
+        padding: 4px 8px;
+        border-bottom: 2px solid #c7d2fe;
+        font-weight: 600;
+        white-space: nowrap;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+    table.rpt td {
+        padding: 3.5px 8px;
+        border-bottom: 1px solid #eee;
+        line-height: 1.3;
+    }
+    table.rpt tbody tr:nth-child(even) td {
+        background: #fafafa;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
     table.rpt .r { text-align: right; }
     table.rpt .c { text-align: center; }
-    table.rpt tfoot .tot td { font-weight: 700; background: #eef2ff; border-top: 2px solid #c7d2fe; }
-    .foot { margin-top: 22px; color: #9ca3af; font-size: 11px; text-align: center; line-height: 1.6; }
+    table.rpt tfoot .tot td {
+        font-weight: 700;
+        background: #eef2ff;
+        border-top: 2px solid #c7d2fe;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+    /* Multi-page robustness: repeat the header (both rowspan rows) on every printed
+       page, keep the totals row as a footer group on the last page, and never split
+       a row across a page break. */
+    table.rpt thead { display: table-header-group; }
+    table.rpt tfoot { display: table-footer-group; }
+    table.rpt tr { break-inside: avoid; page-break-inside: avoid; }
+    .foot { margin-top: 16px; color: #9ca3af; font-size: 10px; text-align: center; line-height: 1.5; }
     .foot .gis { color: #6366f1; font-weight: 600; }
-    @media print { .bar { display: none; } body { padding: 0; } }
+    @media print {
+        .bar { display: none; }
+        body { padding: 0; }
+    }
 </style>
 </head>
 <body>
