@@ -53,6 +53,9 @@ $activeLang = current_lang();
         .reveal.in { animation: fadeUp .7s cubic-bezier(.21,.6,.35,1) forwards }
         .floaty { animation: floaty 6s ease-in-out infinite }
         .blob { animation: blob 18s ease-in-out infinite }
+        @keyframes marquee { from { transform: translateX(-50%) } to { transform: translateX(0) } }
+        .marquee-track { animation: marquee 30s linear infinite; width: max-content }
+        .marquee-wrap:hover .marquee-track { animation-play-state: paused }
         details > summary { list-style:none }
         details > summary::-webkit-details-marker { display:none }
         html { scroll-behavior:smooth }
@@ -65,8 +68,8 @@ $activeLang = current_lang();
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex items-center justify-between h-[4.5rem]">
             <a href="index.php" class="flex items-center gap-3 shrink-0">
-                <span class="inline-flex items-center justify-center rounded-xl bg-white p-1.5 ring-1 ring-gray-200 dark:ring-gray-700 shadow-sm">
-                    <img src="<?= e($brand['logo']) ?>" alt="GrowGig" class="h-9 w-9 object-contain">
+                <span class="inline-flex items-center justify-center h-12 w-12 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 shadow-lg shadow-blue-600/30">
+                    <svg class="h-7 w-7 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V13"/><path d="M10 20V9"/><path d="M16 20v-5"/><path d="M4 8.5l6-4 5 3 5-4"/><path d="M20 3.5v4h-4"/></svg>
                 </span>
                 <span class="leading-tight">
                     <span class="block font-display font-extrabold text-lg bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">GrowGig</span>
@@ -139,9 +142,9 @@ $activeLang = current_lang();
         </div>
 
         <!-- Product mock -->
-        <div class="relative reveal in" style="animation-delay:.15s">
+        <div class="relative reveal in floaty" style="animation-delay:.15s">
             <div class="absolute -inset-6 -z-10 bg-gradient-to-tr from-blue-500/20 to-indigo-500/20 blur-3xl rounded-full"></div>
-            <div class="rounded-2xl bg-white dark:bg-gray-800 shadow-2xl ring-1 ring-gray-900/5 dark:ring-white/10 overflow-hidden rotate-1 hover:rotate-0 transition-transform duration-500">
+            <div class="rounded-2xl bg-white dark:bg-gray-800 shadow-2xl ring-1 ring-gray-900/5 dark:ring-white/10 overflow-hidden">
                 <div class="flex items-center gap-1.5 px-4 py-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
                     <span class="w-3 h-3 rounded-full bg-red-400"></span>
                     <span class="w-3 h-3 rounded-full bg-amber-400"></span>
@@ -207,24 +210,27 @@ $activeLang = current_lang();
 <section class="border-y border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/40">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         <p class="text-center text-sm font-medium text-gray-500 dark:text-gray-400 mb-6"><?= e(__('gg_trusted')) ?></p>
-        <div class="flex flex-wrap items-center justify-center gap-2.5 reveal">
-            <?php
-            // Only brands with a real logo image are shown. To add one: drop the
-            // image into assets/brands/ and add a [path, name] row below.
-            $brands = [
-                ['assets/brands/brightpath.png', 'BrightPath Clinic'],
-                ['assets/brands/kidspark.png',   'KidSpark Therapy'],
-                ['assets/logo.jpg',              'Aktifotak'],
-                ['assets/brands/harmony.png',    'Harmony Health'],
-                ['assets/brands/wellnest.png',   'WellNest'],
-            ];
-            foreach ($brands as [$img, $name]): ?>
-                <span class="inline-flex items-center px-3 py-3 rounded-2xl bg-white dark:bg-gray-800 ring-1 ring-gray-200/80 dark:ring-gray-700 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all">
-                    <span class="rounded-xl bg-white p-1.5 flex items-center justify-center shrink-0 ring-1 ring-gray-200/70">
-                        <img src="<?= e($img) ?>" alt="<?= e($name) ?>" class="h-20 w-auto max-w-[200px] object-contain" loading="lazy">
+        <?php
+        // Only brands with a real logo image are shown. To add one: drop the
+        // image into assets/brands/ and add a [path, name] row below.
+        $brands = [
+            ['assets/brands/brightpath.png', 'BrightPath Clinic'],
+            ['assets/brands/kidspark.png',   'KidSpark Therapy'],
+            ['assets/logo.jpg',              'Aktifotak'],
+            ['assets/brands/harmony.png',    'Harmony Health'],
+            ['assets/brands/wellnest.png',   'WellNest'],
+        ];
+        ?>
+        <div class="marquee-wrap overflow-hidden reveal [mask-image:linear-gradient(to_right,transparent,black_8%,black_92%,transparent)]">
+            <div class="marquee-track flex items-center gap-2.5">
+                <?php foreach (array_merge($brands, $brands) as [$img, $name]): ?>
+                    <span class="inline-flex items-center px-3 py-3 rounded-2xl bg-white dark:bg-gray-800 ring-1 ring-gray-200/80 dark:ring-gray-700 shadow-sm shrink-0">
+                        <span class="rounded-xl bg-white p-1.5 flex items-center justify-center shrink-0 ring-1 ring-gray-200/70">
+                            <img src="<?= e($img) ?>" alt="<?= e($name) ?>" class="h-20 w-auto max-w-[200px] object-contain" loading="lazy">
+                        </span>
                     </span>
-                </span>
-            <?php endforeach; ?>
+                <?php endforeach; ?>
+            </div>
         </div>
     </div>
 </section>
@@ -250,9 +256,10 @@ $activeLang = current_lang();
             ['gg_feat9_title','gg_feat9_desc','from-fuchsia-500 to-fuchsia-600','M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z'],
         ];
         foreach ($features as $i => [$t,$d,$bg,$icon]): ?>
-            <div class="reveal group p-6 rounded-2xl bg-white dark:bg-gray-800/70 border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300" style="animation-delay:<?= $i * 60 ?>ms">
-                <div class="w-12 h-12 rounded-xl bg-gradient-to-br <?= $bg ?> text-white flex items-center justify-center mb-4 shadow-lg shadow-blue-600/10 group-hover:scale-110 transition-transform">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="<?= $icon ?>"/></svg>
+            <div class="reveal group relative overflow-hidden p-6 rounded-2xl bg-white dark:bg-gray-800/70 border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-2xl hover:shadow-blue-600/10 hover:-translate-y-1.5 hover:border-transparent transition-all duration-300" style="animation-delay:<?= $i * 60 ?>ms">
+                <div class="pointer-events-none absolute -top-16 -right-16 w-40 h-40 rounded-full bg-gradient-to-br <?= $bg ?> opacity-0 group-hover:opacity-10 blur-2xl transition-opacity duration-500"></div>
+                <div class="w-14 h-14 rounded-2xl bg-gradient-to-br <?= $bg ?> text-white flex items-center justify-center mb-5 shadow-lg shadow-blue-600/20 ring-4 ring-white dark:ring-gray-800 group-hover:scale-110 group-hover:-rotate-3 transition-transform duration-300">
+                    <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.9" d="<?= $icon ?>"/></svg>
                 </div>
                 <h3 class="font-display font-semibold text-lg text-gray-900 dark:text-white"><?= e(__($t)) ?></h3>
                 <p class="mt-2 text-sm text-gray-600 dark:text-gray-400 leading-relaxed"><?= e(__($d)) ?></p>
@@ -453,17 +460,10 @@ $activeLang = current_lang();
                     <span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-400 text-amber-950"><?= e(__('gg_pr_promo')) ?></span>
                 </div>
                 <p class="mt-1 flex items-end gap-1">
-                    <span id="proPrice" data-monthly="RM29.90" data-annual="RM19.90" class="font-display text-5xl font-extrabold">RM29.90</span>
+                    <span class="font-display text-5xl font-extrabold">RM9.90</span>
                     <span class="text-blue-200 mb-1"><?= e(__('gg_pr_permonth')) ?></span>
                 </p>
-                <p id="proNote" data-monthly="<?= e(__('gg_pr_promo_note')) ?>" data-annual="<?= e(__('gg_pr_annual_note')) ?>" class="mt-1 text-xs text-blue-100"><?= e(__('gg_pr_promo_note')) ?></p>
-
-                <label class="mt-4 inline-flex items-center gap-2.5 cursor-pointer select-none w-fit">
-                    <input type="checkbox" class="peer sr-only" onchange="toggleAnnual(this)">
-                    <span class="relative w-11 h-6 rounded-full bg-white/30 peer-checked:bg-white transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-5 after:h-5 after:rounded-full after:bg-white after:shadow peer-checked:after:bg-blue-600 peer-checked:after:translate-x-5 after:transition-all"></span>
-                    <span class="text-sm font-semibold"><?= e(__('gg_pr_annual_toggle')) ?></span>
-                    <span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-white/20"><?= e(__('gg_pr_annual_hint')) ?></span>
-                </label>
+                <p class="mt-2 text-xs text-blue-100 leading-relaxed"><?= e(__('gg_pr_promo_note')) ?></p>
 
                 <a href="register.php" class="mt-6 inline-flex justify-center px-5 py-3 rounded-xl font-semibold bg-white text-blue-700 hover:bg-blue-50 transition-colors"><?= e(__('gg_pr_start_pro')) ?></a>
                 <div class="mt-4 flex items-center justify-center gap-2 py-2 rounded-lg bg-white/10 text-xs font-semibold text-blue-50">
@@ -579,7 +579,7 @@ $activeLang = current_lang();
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
         <div>
             <div class="flex items-center gap-3">
-                <span class="inline-flex items-center justify-center rounded-xl bg-white p-1.5"><img src="<?= e($brand['logo']) ?>" alt="GrowGig" class="h-9 w-9 object-contain"></span>
+                <span class="inline-flex items-center justify-center h-11 w-11 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 shadow-lg shadow-blue-600/30"><svg class="h-6 w-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V13"/><path d="M10 20V9"/><path d="M16 20v-5"/><path d="M4 8.5l6-4 5 3 5-4"/><path d="M20 3.5v4h-4"/></svg></span>
                 <span class="leading-tight">
                     <span class="block font-display font-extrabold text-lg text-white">GrowGig</span>
                     <span class="block text-[10.5px] font-medium tracking-wide text-gray-500 -mt-0.5"><?= e(__('gg_brand_tagline')) ?></span>
