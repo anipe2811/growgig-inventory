@@ -51,6 +51,7 @@ $IC = [
     'users'  => 'M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1a4 4 0 100-8 4 4 0 000 8z',
     'bell'   => 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9',
     'user'   => 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',
+    'chat'   => 'M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4-.8L3 21l1.8-4A7.96 7.96 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z',
     'logout' => 'M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1',
 ];
 ?>
@@ -108,6 +109,7 @@ $IC = [
                     <?= sidebar_link('users.php', $current, __('nav_users'), $IC['users']) ?>
                 <?php endif; ?>
                 <?= sidebar_link('notifications.php', $current, __('nav_notifications'), $IC['bell'], $unread) ?>
+                <?= sidebar_link('feedback.php', $current, __('nav_feedback'), $IC['chat']) ?>
                 <?= sidebar_link('profile.php', $current, __('nav_profile'), $IC['user']) ?>
             <?php endif; ?>
         </nav>
