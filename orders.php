@@ -251,6 +251,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: ' . $redirectBase . '&msg=cancelled'); exit;
     }
 
+    /* Delete an order permanently. Only for states that never applied stock:
+     * requested / pending / rejected / cancelled. Manager: any; branch user: own branch. */
+    if ($action === 'delete_order') {
+        $oid = (int) ($_POST['id'] ?? 0);
+        $deletable = "'requested','pending','rejected','cancelled'";
+        $pdo->beginTransaction();
+        try {
+            if ($canManage) {
+                $sel = $pdo->prepare("SELECT id FROM purchase_orders WHERE id = ? AND status IN ($deletable) FOR UPDATE");
+                $sel->execute([$oid]);
+            } elseif ($isBranchUser) {
+                $sel = $pdo->prepare("SELECT id FROM purchase_orders WHERE id = ? AND branch_id = ? AND status IN ($deletable) FOR UPDATE");
+                $sel->execute([$oid, $userBranch]);
+            } else {
+                $sel = null;
+            }
+            if ($sel && $sel->fetch()) {
+                $pdo->prepare('DELETE FROM purchase_order_items WHERE order_id = ?')->execute([$oid]);
+                $pdo->prepare('DELETE FROM purchase_orders WHERE id = ?')->execute([$oid]);
+            }
+            $pdo->commit();
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) { $pdo->rollBack(); }
+        }
+        header('Location: ' . $redirectBase . '&msg=deleted'); exit;
+    }
+
     /* Report a receipt problem (wrong / short delivery). Branch user (own branch) or manager.
      * Notifies the supplier and the managers; the order status is left unchanged. */
     if ($action === 'report_issue') {
@@ -360,6 +387,7 @@ $flashMap = [
     'verified'    => ['ord_verified',   'green'],
     'forwarded'   => ['ord_forwarded',  'green'],
     'cancelled'   => ['ord_cancelled',  'green'],
+    'deleted'     => ['ord_deleted',    'green'],
     'issue'       => ['ord_issue_reported', 'green'],
     'adjusted'    => ['ord_adjusted',   'green'],
     'empty'       => ['ord_empty_lines','red'],
@@ -635,6 +663,11 @@ require __DIR__ . '/includes/header.php';
                                             <form method="post" onsubmit="var r=prompt('<?= e(__('issue_prompt')) ?>'); if(r===null){return false;} this.reason.value=r;">
                                                 <?= csrf_field() ?><input type="hidden" name="action" value="report_issue"><input type="hidden" name="id" value="<?= (int) $o['id'] ?>"><input type="hidden" name="reason" value="">
                                                 <button class="px-2.5 py-1 rounded-lg text-xs font-medium text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-colors"><?= e(__('btn_report_issue')) ?></button>
+                                            </form>
+                                        <?php elseif (($canManage || $ownBranch) && in_array($o['status'], ['rejected', 'cancelled'], true)): ?>
+                                            <form method="post" onsubmit="return confirm('<?= e(__('ord_confirm_delete')) ?>');">
+                                                <?= csrf_field() ?><input type="hidden" name="action" value="delete_order"><input type="hidden" name="id" value="<?= (int) $o['id'] ?>">
+                                                <button class="px-2.5 py-1 rounded-lg text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"><?= e(__('btn_delete')) ?></button>
                                             </form>
                                         <?php else: ?>
                                             <span class="text-gray-300 dark:text-gray-600">-</span>

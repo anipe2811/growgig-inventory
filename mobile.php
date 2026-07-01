@@ -498,7 +498,13 @@ require __DIR__ . '/includes/header.php';
 
         <!-- ============ (a) New trip: take stock to standby ============ -->
         <?php if ($canEdit): ?>
-            <form method="post" action="mobile.php" class="mt-6">
+            <div class="mt-6 flex justify-end">
+                <button type="button" class="mtoggle inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-600/20" data-target="new-trip-panel" aria-expanded="false">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                    <?= e(__('mob_new')) ?>
+                </button>
+            </div>
+            <form method="post" action="mobile.php" id="new-trip-panel" class="mt-4 hidden">
                 <?= csrf_field() ?>
                 <input type="hidden" name="action" value="create">
                 <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700">
@@ -593,15 +599,22 @@ require __DIR__ . '/includes/header.php';
                                         <?php if (!empty($trip['note'])): ?> &middot; <?= e($trip['note']) ?><?php endif; ?>
                                     </p>
                                 </div>
-                                <span class="self-start inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
-                                    <?= e(__('status_open')) ?>
-                                </span>
+                                <div class="flex items-center gap-2 self-start">
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+                                        <?= e(__('status_open')) ?>
+                                    </span>
+                                    <button type="button" class="mtoggle inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors" data-target="trip-body-<?= $tid ?>" aria-expanded="false">
+                                        <svg class="mchev w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                                        <?= e(__('mob_items_btn')) ?>
+                                    </button>
+                                </div>
                             </div>
 
                             <form method="post" action="mobile.php" class="settle-form">
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="action" value="settle">
                                 <input type="hidden" name="trip_id" value="<?= $tid ?>">
+                                <div id="trip-body-<?= $tid ?>" class="hidden">
                                 <?php if ($canEdit): ?>
                                     <div class="px-4 sm:px-5 py-3 border-b border-gray-100 dark:border-gray-700 flex flex-wrap items-center gap-2">
                                         <label class="text-sm font-medium text-gray-700 dark:text-gray-300"><?= e(__('mob_return_date')) ?>:</label>
@@ -651,6 +664,7 @@ require __DIR__ . '/includes/header.php';
                                         </button>
                                     </div>
                                 <?php endif; ?>
+                                </div><!-- /trip-body -->
                             </form>
                         </div>
                     <?php endforeach; ?>
@@ -865,6 +879,18 @@ require __DIR__ . '/includes/header.php';
             var open = row.classList.toggle('hidden') === false;
             btn.setAttribute('aria-expanded', open ? 'true' : 'false');
             var chev = btn.querySelector('.hist-chevron');
+            if (chev) { chev.style.transform = open ? 'rotate(180deg)' : ''; }
+        });
+    });
+
+    // Generic collapse toggles: New Trip panel + Active Trip bodies.
+    document.querySelectorAll('.mtoggle').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var el = document.getElementById(btn.dataset.target);
+            if (!el) { return; }
+            var open = el.classList.toggle('hidden') === false;
+            btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+            var chev = btn.querySelector('.mchev');
             if (chev) { chev.style.transform = open ? 'rotate(180deg)' : ''; }
         });
     });

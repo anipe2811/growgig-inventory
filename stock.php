@@ -98,7 +98,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Preserve the history filter on redirect so the user stays on the same view.
         $hp = in_array($_POST['hp'] ?? '', ['day', 'month', 'year'], true) ? $_POST['hp'] : 'day';
         $hv = preg_replace('/[^0-9\-]/', '', (string) ($_POST['hv'] ?? ''));
-        header('Location: stock.php?hp=' . $hp . '&hv=' . urlencode($hv) . '&msg=mv_edited');
+        $hn = in_array($_POST['hn'] ?? '', ['10', '100', 'all'], true) ? $_POST['hn'] : '10';
+        header('Location: stock.php?hp=' . $hp . '&hv=' . urlencode($hv) . '&hn=' . $hn . '&msg=mv_edited');
         exit;
     }
 
@@ -167,13 +168,17 @@ if ($histPeriod === 'day') {
     $hTo     = $histVal . '-12-31';
 }
 
+/* How many recent rows to show: 10 (default) | 100 | all. */
+$histCount = in_array($_GET['hn'] ?? '', ['10', '100', 'all'], true) ? $_GET['hn'] : '10';
+$histLimit = $histCount === 'all' ? 100000 : (int) $histCount;
+
 $history = [];
 if (!$noBranch && $selectedBranch) {
     $st = $pdo->prepare(
         'SELECT m.id, m.item_id, m.type, m.quantity, m.balance_after, m.movement_date, i.name
          FROM stock_movements m JOIN items i ON i.id = m.item_id
          WHERE m.branch_id = ? AND m.movement_date BETWEEN ? AND ?
-         ORDER BY m.id DESC LIMIT 500'
+         ORDER BY m.id DESC LIMIT ' . $histLimit
     );
     $st->execute([$selectedBranch, $hFrom, $hTo]);
     $history = $st->fetchAll();
@@ -355,6 +360,11 @@ require __DIR__ . '/includes/header.php';
                     <?php else: ?>
                         <input type="number" name="hv" value="<?= e($histVal) ?>" min="2000" max="2100" onchange="this.form.submit()" class="w-28 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition">
                     <?php endif; ?>
+                    <select name="hn" onchange="this.form.submit()" class="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition">
+                        <option value="10"  <?= $histCount === '10'  ? 'selected' : '' ?>><?= e(__('opt_show')) ?> 10</option>
+                        <option value="100" <?= $histCount === '100' ? 'selected' : '' ?>><?= e(__('opt_show')) ?> 100</option>
+                        <option value="all" <?= $histCount === 'all' ? 'selected' : '' ?>><?= e(__('opt_all')) ?></option>
+                    </select>
                 </form>
             </div>
             <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden transition-colors">
@@ -395,6 +405,7 @@ require __DIR__ . '/includes/header.php';
                                                     <input type="hidden" name="mv_qty" value="">
                                                     <input type="hidden" name="hp" value="<?= e($histPeriod) ?>">
                                                     <input type="hidden" name="hv" value="<?= e($histVal) ?>">
+                                                    <input type="hidden" name="hn" value="<?= e($histCount) ?>">
                                                     <button type="submit" class="px-2.5 py-1 rounded-lg text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors"><?= e(__('btn_edit')) ?></button>
                                                 </form>
                                             </td>
