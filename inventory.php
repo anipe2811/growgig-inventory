@@ -175,6 +175,9 @@ if (!$noBranch) {
     } elseif ($filterBranch && in_array($filterBranch, $validBranchIds, true)) {
         $where = 'WHERE i.branch_id = ?';
         $params[] = $filterBranch;
+    } elseif ($seesAll && $acct) {
+        // Default (no explicit branch filter): restrict to the acting account's branches.
+        $where = 'WHERE i.branch_id IN (SELECT id FROM branches WHERE account_id = ' . (int) $acct . ')';
     }
     $sql  = "SELECT i.*, b.name AS branch_name FROM items i LEFT JOIN branches b ON b.id = i.branch_id $where ORDER BY b.name ASC, i.category ASC, i.sort_order ASC, i.name ASC";
     $stmt = $pdo->prepare($sql);
