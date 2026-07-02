@@ -9,15 +9,21 @@ $role     = $_SESSION['user_role'] ?? 'account_user';
 $userName = $_SESSION['user_name'] ?? '';
 $seesAll  = role_sees_all_branches($role);
 $userBranch = isset($_SESSION['branch_id']) && $_SESSION['branch_id'] !== null ? (int) $_SESSION['branch_id'] : null;
+$acct     = current_account_id(); // non-null = restrict stats to this account; null = agency "all accounts" (global)
+
+// When an account is being acted on, limit every "all branches" aggregate to that
+// account's branches. $acct is an int, so inlining the subquery is injection-safe.
+$acctItemsWhere = $acct ? ' WHERE branch_id IN (SELECT id FROM branches WHERE account_id = ' . (int) $acct . ')' : '';
+$acctItemsAnd   = $acct ? ' AND branch_id IN (SELECT id FROM branches WHERE account_id = ' . (int) $acct . ')' : '';
 
 /* Live inventory statistics — scoped to the user's branch when applicable. */
 $totalBranches  = 0;
 $userBranchName = '';
 if ($seesAll) {
-    $totalItems    = (int) $pdo->query('SELECT COUNT(*) FROM items')->fetchColumn();
-    $totalQty      = (int) $pdo->query('SELECT COALESCE(SUM(quantity),0) FROM items')->fetchColumn();
-    $lowStock      = (int) $pdo->query('SELECT COUNT(*) FROM items WHERE quantity <= reorder_level')->fetchColumn();
-    $totalBranches = (int) $pdo->query('SELECT COUNT(*) FROM branches')->fetchColumn();
+    $totalItems    = (int) $pdo->query('SELECT COUNT(*) FROM items' . $acctItemsWhere)->fetchColumn();
+    $totalQty      = (int) $pdo->query('SELECT COALESCE(SUM(quantity),0) FROM items' . $acctItemsWhere)->fetchColumn();
+    $lowStock      = (int) $pdo->query('SELECT COUNT(*) FROM items WHERE quantity <= reorder_level' . $acctItemsAnd)->fetchColumn();
+    $totalBranches = (int) $pdo->query('SELECT COUNT(*) FROM branches' . ($acct ? ' WHERE account_id = ' . (int) $acct : ''))->fetchColumn();
 } else {
     $s = $pdo->prepare('SELECT COUNT(*) FROM items WHERE branch_id = ?');                       $s->execute([$userBranch]); $totalItems = (int) $s->fetchColumn();
     $s = $pdo->prepare('SELECT COALESCE(SUM(quantity),0) FROM items WHERE branch_id = ?');       $s->execute([$userBranch]); $totalQty   = (int) $s->fetchColumn();
@@ -25,15 +31,31 @@ if ($seesAll) {
     $s = $pdo->prepare('SELECT name FROM branches WHERE id = ?');                                $s->execute([$userBranch]); $userBranchName = (string) ($s->fetchColumn() ?: '');
 }
 
-/* Agency-admin-only metric. */
+/* Agency-admin-only metric. When acting on a specific account, count only that
+ * account's users; agency "all accounts" (null) keeps the global count. */
 $totalUsers = 0;
 if (role_is_super($role)) {
-    $totalUsers = (int) $pdo->query('SELECT COUNT(*) FROM users')->fetchColumn();
+    if ($acct) {
+        $us = $pdo->prepare('SELECT COUNT(*) FROM users WHERE account_id = ?');
+        $us->execute([$acct]);
+        $totalUsers = (int) $us->fetchColumn();
+    } else {
+        $totalUsers = (int) $pdo->query('SELECT COUNT(*) FROM users')->fetchColumn();
+    }
 }
 
 /* ---- Order analytics (scoped) for the charts + KPI chips. ---- */
-$ordWhere  = $seesAll ? '' : 'WHERE branch_id = ?';
-$ordParams = $seesAll ? [] : [$userBranch];
+if (!$seesAll) {
+    $ordWhere  = 'WHERE branch_id = ?';
+    $ordParams = [$userBranch];
+} elseif ($acct) {
+    // Default (all branches) but acting on an account: limit to that account's branches.
+    $ordWhere  = 'WHERE branch_id IN (SELECT id FROM branches WHERE account_id = ' . (int) $acct . ')';
+    $ordParams = [];
+} else {
+    $ordWhere  = '';
+    $ordParams = [];
+}
 $statusCounts = ['requested' => 0, 'pending' => 0, 'delivered' => 0, 'forwarded' => 0, 'received' => 0, 'rejected' => 0, 'cancelled' => 0];
 try {
     $q = $pdo->prepare("SELECT status, COUNT(*) c FROM purchase_orders $ordWhere GROUP BY status");
@@ -52,8 +74,16 @@ for ($i = 5; $i >= 0; $i--) { $months[] = date('Y-m', strtotime("first day of -$
 $inByMonth  = array_fill_keys($months, 0);
 $outByMonth = array_fill_keys($months, 0);
 try {
-    $mvWhere  = $seesAll ? '' : 'AND branch_id = ?';
-    $mvParams = $seesAll ? [] : [$userBranch];
+    if (!$seesAll) {
+        $mvWhere  = 'AND branch_id = ?';
+        $mvParams = [$userBranch];
+    } elseif ($acct) {
+        $mvWhere  = 'AND branch_id IN (SELECT id FROM branches WHERE account_id = ' . (int) $acct . ')';
+        $mvParams = [];
+    } else {
+        $mvWhere  = '';
+        $mvParams = [];
+    }
     $rows = $pdo->prepare("SELECT DATE_FORMAT(movement_date,'%Y-%m') ym, type, SUM(quantity) q FROM stock_movements WHERE movement_date >= ? $mvWhere GROUP BY ym, type");
     $rows->execute(array_merge([$months[0] . '-01'], $mvParams));
     foreach ($rows->fetchAll() as $r) {
