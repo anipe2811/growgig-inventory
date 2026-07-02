@@ -16,6 +16,7 @@ $current   = basename($_SERVER['SCRIPT_NAME']);
 $activeLang = current_lang();
 $role      = $_SESSION['user_role'] ?? '';
 $unread    = is_logged_in() ? unread_notification_count() : 0;
+$fbUnread  = is_logged_in() ? unread_feedback_count() : 0;
 
 /* Top-bar link classes (logged-out pages). */
 function nav_link_class(string $file, string $current): string
@@ -116,7 +117,7 @@ $IC = [
                     <?= sidebar_link('users.php', $current, __('nav_users'), $IC['users']) ?>
                 <?php endif; ?>
                 <?= sidebar_link('notifications.php', $current, __('nav_notifications'), $IC['bell'], $unread) ?>
-                <?= sidebar_link('feedback.php', $current, __('nav_feedback'), $IC['chat']) ?>
+                <?= sidebar_link('feedback.php', $current, __('nav_feedback'), $IC['chat'], $fbUnread) ?>
                 <?= sidebar_link('profile.php', $current, __('nav_profile'), $IC['user']) ?>
             <?php endif; ?>
         </nav>

@@ -39,11 +39,8 @@ $cond = ["(m.type = 'out' OR (m.type = 'in' AND m.trip_id IS NOT NULL))"]; $para
 if ($scopeBranch) { $cond[] = 'm.branch_id = ?';     $params[] = $scopeBranch; }
 if ($fromDate)    { $cond[] = 'm.movement_date >= ?'; $params[] = $fromDate; }
 if ($toDate)      { $cond[] = 'm.movement_date <= ?'; $params[] = $toDate; }
-// Sales only lists therapy products + BUKU BIRU + PERFUME CAR; everything else is excluded.
-$cond[]   = '(i.category = ? OR i.name IN (?, ?))';
-$params[] = 'Produk Terapi';
-$params[] = 'BUKU BIRU';
-$params[] = 'PERFUME CAR';
+// Sales only lists items flagged "Mark as Sale" in Inventory; everything else is excluded.
+$cond[] = 'i.mark_as_sale = 1';
 $where = 'WHERE ' . implode(' AND ', $cond);
 $stmt = $pdo->prepare(
     "SELECT i.name, i.category, i.price, b.name AS branch,

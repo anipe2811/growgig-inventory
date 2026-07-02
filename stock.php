@@ -103,6 +103,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    /* Delete one movement (remove a wrong entry); reverses its effect and rebalances the ledger. */
+    if (($_POST['action'] ?? '') === 'delete_movement') {
+        $mid = (int) ($_POST['mv_id'] ?? 0);
+        if ($mid > 0) {
+            $pdo->beginTransaction();
+            try {
+                $sel = $pdo->prepare('SELECT id, item_id, type, quantity FROM stock_movements WHERE id = ? AND branch_id = ? FOR UPDATE');
+                $sel->execute([$mid, $branchId]);
+                $row = $sel->fetch();
+                if ($row) {
+                    $iid    = (int) $row['item_id'];
+                    // Reverse this movement's effect on the item balance, then drop the row.
+                    $revert = ($row['type'] === 'in' ? -1 : 1) * (int) $row['quantity'];
+                    $pdo->prepare('DELETE FROM stock_movements WHERE id = ?')->execute([$mid]);
+                    $pdo->prepare('UPDATE items SET quantity = quantity + ? WHERE id = ? AND branch_id = ?')->execute([$revert, $iid, $branchId]);
+                    // Rebuild balance_after for the item's remaining ledger (opening = current − net change).
+                    $q = $pdo->prepare('SELECT quantity FROM items WHERE id = ? AND branch_id = ?');
+                    $q->execute([$iid, $branchId]);
+                    $running = (int) $q->fetchColumn();
+                    $q = $pdo->prepare("SELECT COALESCE(SUM(CASE WHEN type='in' THEN quantity ELSE -quantity END),0) FROM stock_movements WHERE item_id = ? AND branch_id = ?");
+                    $q->execute([$iid, $branchId]);
+                    $running -= (int) $q->fetchColumn(); // opening balance
+                    $rows = $pdo->prepare('SELECT id, type, quantity FROM stock_movements WHERE item_id = ? AND branch_id = ? ORDER BY id ASC');
+                    $rows->execute([$iid, $branchId]);
+                    $ub = $pdo->prepare('UPDATE stock_movements SET balance_after = ? WHERE id = ?');
+                    foreach ($rows->fetchAll() as $m) {
+                        $running += ($m['type'] === 'in' ? 1 : -1) * (int) $m['quantity'];
+                        $ub->execute([$running, (int) $m['id']]);
+                    }
+                }
+                $pdo->commit();
+            } catch (Throwable $e) { $pdo->rollBack(); }
+        }
+        $hp = in_array($_POST['hp'] ?? '', ['day', 'month', 'year'], true) ? $_POST['hp'] : 'day';
+        $hv = preg_replace('/[^0-9\-]/', '', (string) ($_POST['hv'] ?? ''));
+        $hn = in_array($_POST['hn'] ?? '', ['10', '100', 'all'], true) ? $_POST['hn'] : '10';
+        header('Location: stock.php?hp=' . $hp . '&hv=' . urlencode($hv) . '&hn=' . $hn . '&msg=mv_deleted');
+        exit;
+    }
+
     // Validate the movement date (default: today).
     $dateIn = (string) ($_POST['movement_date'] ?? '');
     $d = DateTime::createFromFormat('Y-m-d', $dateIn);
@@ -185,11 +225,12 @@ if (!$noBranch && $selectedBranch) {
 }
 
 $flashMap = [
-    'saved'     => ['stock_saved',     'green'],
-    'none'      => ['stock_nothing',   'red'],
-    'mv_edited' => ['stock_mv_edited',  'green'],
-    'denied'    => ['inv_not_allowed', 'red'],
-    'frozen'    => ['stock_frozen',    'red'],
+    'saved'      => ['stock_saved',      'green'],
+    'none'       => ['stock_nothing',    'red'],
+    'mv_edited'  => ['stock_mv_edited',   'green'],
+    'mv_deleted' => ['stock_mv_deleted',  'green'],
+    'denied'     => ['inv_not_allowed',  'red'],
+    'frozen'     => ['stock_frozen',     'red'],
 ];
 $flash = $flashMap[$_GET['msg'] ?? ''] ?? null;
 
@@ -397,17 +438,28 @@ require __DIR__ . '/includes/header.php';
                                         <td class="px-4 py-2.5 text-right font-semibold text-gray-900 dark:text-white"><?= e($h['balance_after']) ?></td>
                                         <?php if ($canEdit): ?>
                                             <td class="px-4 py-2.5 text-right">
-                                                <form method="post" action="stock.php" class="inline"
-                                                      onsubmit="var q=prompt('<?= e(__('stock_edit_prompt')) ?>','<?= (int) $h['quantity'] ?>'); if(q===null){return false;} q=parseInt(q,10); if(isNaN(q)||q<1){alert('<?= e(__('stock_edit_invalid')) ?>');return false;} this.mv_qty.value=q;">
-                                                    <?= csrf_field() ?>
-                                                    <input type="hidden" name="action" value="edit_movement">
-                                                    <input type="hidden" name="mv_id" value="<?= (int) $h['id'] ?>">
-                                                    <input type="hidden" name="mv_qty" value="">
-                                                    <input type="hidden" name="hp" value="<?= e($histPeriod) ?>">
-                                                    <input type="hidden" name="hv" value="<?= e($histVal) ?>">
-                                                    <input type="hidden" name="hn" value="<?= e($histCount) ?>">
-                                                    <button type="submit" class="px-2.5 py-1 rounded-lg text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors"><?= e(__('btn_edit')) ?></button>
-                                                </form>
+                                                <div class="flex items-center justify-end gap-1">
+                                                    <form method="post" action="stock.php" class="inline"
+                                                          onsubmit="var q=prompt('<?= e(__('stock_edit_prompt')) ?>','<?= (int) $h['quantity'] ?>'); if(q===null){return false;} q=parseInt(q,10); if(isNaN(q)||q<1){alert('<?= e(__('stock_edit_invalid')) ?>');return false;} this.mv_qty.value=q;">
+                                                        <?= csrf_field() ?>
+                                                        <input type="hidden" name="action" value="edit_movement">
+                                                        <input type="hidden" name="mv_id" value="<?= (int) $h['id'] ?>">
+                                                        <input type="hidden" name="mv_qty" value="">
+                                                        <input type="hidden" name="hp" value="<?= e($histPeriod) ?>">
+                                                        <input type="hidden" name="hv" value="<?= e($histVal) ?>">
+                                                        <input type="hidden" name="hn" value="<?= e($histCount) ?>">
+                                                        <button type="submit" class="px-2.5 py-1 rounded-lg text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors"><?= e(__('btn_edit')) ?></button>
+                                                    </form>
+                                                    <form method="post" action="stock.php" class="inline" onsubmit="return confirm('<?= e(__('stock_del_confirm')) ?>');">
+                                                        <?= csrf_field() ?>
+                                                        <input type="hidden" name="action" value="delete_movement">
+                                                        <input type="hidden" name="mv_id" value="<?= (int) $h['id'] ?>">
+                                                        <input type="hidden" name="hp" value="<?= e($histPeriod) ?>">
+                                                        <input type="hidden" name="hv" value="<?= e($histVal) ?>">
+                                                        <input type="hidden" name="hn" value="<?= e($histCount) ?>">
+                                                        <button type="submit" class="px-2.5 py-1 rounded-lg text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"><?= e(__('btn_delete')) ?></button>
+                                                    </form>
+                                                </div>
                                             </td>
                                         <?php endif; ?>
                                     </tr>

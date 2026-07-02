@@ -63,6 +63,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    // Flip the "count this item in the Sales Report" flag (inline checkbox toggle).
+    if ($action === 'toggle_sale') {
+        $id = (int) ($_POST['id'] ?? 0);
+        if ($seesAll) {
+            $pdo->prepare('UPDATE items SET mark_as_sale = 1 - mark_as_sale WHERE id = ?')->execute([$id]);
+        } else {
+            $pdo->prepare('UPDATE items SET mark_as_sale = 1 - mark_as_sale WHERE id = ? AND branch_id = ?')->execute([$id, $userBranch]);
+        }
+        $back = (ctype_digit((string) ($_POST['fb'] ?? '')) && (int) $_POST['fb'] > 0) ? '&branch=' . (int) $_POST['fb'] : '';
+        header('Location: inventory.php?msg=updated' . $back);
+        exit;
+    }
+
     $name     = trim($_POST['name'] ?? '');
     $sku      = trim($_POST['sku'] ?? '');
     $category = trim($_POST['category'] ?? '');
@@ -70,6 +83,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $unit     = trim($_POST['unit'] ?? 'pcs');
     $reorder  = (int) ($_POST['reorder_level'] ?? 0);
     $price    = (float) ($_POST['price'] ?? 0);
+    $markSale = isset($_POST['mark_as_sale']) ? 1 : 0;
     $notes    = trim($_POST['notes'] ?? '');
 
     if ($name !== '') {
@@ -77,15 +91,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $id = (int) ($_POST['id'] ?? 0);
             if ($seesAll) {
                 $stmt = $pdo->prepare(
-                    'UPDATE items SET branch_id=?, name=?, sku=?, category=?, quantity=?, unit=?, reorder_level=?, price=?, notes=? WHERE id=?'
+                    'UPDATE items SET branch_id=?, name=?, sku=?, category=?, quantity=?, unit=?, reorder_level=?, price=?, mark_as_sale=?, notes=? WHERE id=?'
                 );
-                $stmt->execute([$branchId, $name, $sku, $category, $quantity, $unit, $reorder, $price, $notes, $id]);
+                $stmt->execute([$branchId, $name, $sku, $category, $quantity, $unit, $reorder, $price, $markSale, $notes, $id]);
             } else {
                 // account_user: branch stays fixed; can only touch their own branch's items.
                 $stmt = $pdo->prepare(
-                    'UPDATE items SET name=?, sku=?, category=?, quantity=?, unit=?, reorder_level=?, price=?, notes=? WHERE id=? AND branch_id=?'
+                    'UPDATE items SET name=?, sku=?, category=?, quantity=?, unit=?, reorder_level=?, price=?, mark_as_sale=?, notes=? WHERE id=? AND branch_id=?'
                 );
-                $stmt->execute([$name, $sku, $category, $quantity, $unit, $reorder, $price, $notes, $id, $userBranch]);
+                $stmt->execute([$name, $sku, $category, $quantity, $unit, $reorder, $price, $markSale, $notes, $id, $userBranch]);
             }
             header('Location: inventory.php?msg=updated');
             exit;
@@ -96,9 +110,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $so->execute([$branchId]);
         $nextOrder = (int) $so->fetchColumn();
         $stmt = $pdo->prepare(
-            'INSERT INTO items (branch_id, name, sku, category, quantity, unit, reorder_level, price, notes, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            'INSERT INTO items (branch_id, name, sku, category, quantity, unit, reorder_level, price, mark_as_sale, notes, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
         );
-        $stmt->execute([$branchId, $name, $sku, $category, $quantity, $unit, $reorder, $price, $notes, $nextOrder]);
+        $stmt->execute([$branchId, $name, $sku, $category, $quantity, $unit, $reorder, $price, $markSale, $notes, $nextOrder]);
         header('Location: inventory.php?msg=added');
         exit;
     }
@@ -268,6 +282,14 @@ require __DIR__ . '/includes/header.php';
                         <input type="number" step="0.01" min="0" name="price" value="<?= e($editItem['price'] ?? '0.00') ?>"
                                class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white px-3 py-2 focus:ring-2 focus:ring-indigo-500 outline-none transition">
                     </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"><?= e(__('col_mark_sale')) ?></label>
+                        <label class="flex items-center gap-2 mt-2 cursor-pointer select-none">
+                            <input type="checkbox" name="mark_as_sale" value="1" <?= (int) ($editItem['mark_as_sale'] ?? 0) === 1 ? 'checked' : '' ?>
+                                   class="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500">
+                            <span class="text-sm text-gray-500 dark:text-gray-400"><?= e(__('inv_mark_sale_hint')) ?></span>
+                        </label>
+                    </div>
                     <div class="sm:col-span-2 lg:col-span-3">
                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"><?= e(__('label_notes')) ?></label>
                         <input type="text" name="notes" value="<?= e($editItem['notes'] ?? '') ?>" placeholder="<?= e(__('ph_item_notes')) ?>"
@@ -316,6 +338,7 @@ require __DIR__ . '/includes/header.php';
                             <th class="px-4 py-3 font-semibold"><?= e(__('col_unit')) ?></th>
                             <th class="px-4 py-3 font-semibold text-right"><?= e(__('col_reorder')) ?></th>
                             <th class="px-4 py-3 font-semibold text-right"><?= e(__('col_price')) ?></th>
+                            <th class="px-4 py-3 font-semibold text-center"><?= e(__('col_mark_sale')) ?></th>
                             <th class="px-4 py-3 font-semibold"><?= e(__('col_status')) ?></th>
                             <?php if ($canEdit): ?><th class="px-4 py-3 font-semibold text-right"><?= e(__('col_actions')) ?></th><?php endif; ?>
                         </tr>
@@ -323,12 +346,12 @@ require __DIR__ . '/includes/header.php';
                     <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
                         <?php if (!$items): ?>
                             <tr>
-                                <td colspan="<?= $canEdit ? 10 : 9 ?>" class="px-4 py-10 text-center text-gray-500 dark:text-gray-400">
+                                <td colspan="<?= $canEdit ? 11 : 10 ?>" class="px-4 py-10 text-center text-gray-500 dark:text-gray-400">
                                     <?= e(__('inv_empty')) ?>
                                 </td>
                             </tr>
                         <?php else: ?>
-                            <?php $lastGroup = null; $grpColspan = $canEdit ? 10 : 9; ?>
+                            <?php $lastGroup = null; $grpColspan = $canEdit ? 11 : 10; ?>
                             <?php foreach ($items as $item):
                                 $isLow = (int) $item['quantity'] <= (int) $item['reorder_level'];
                                 $groupKey = ($item['branch_name'] ?? '') . '|' . (string) ($item['category'] ?? '');
@@ -350,6 +373,22 @@ require __DIR__ . '/includes/header.php';
                                     <td class="px-4 py-3 text-gray-500 dark:text-gray-400"><?= e($item['unit']) ?></td>
                                     <td class="px-4 py-3 text-right text-gray-500 dark:text-gray-400"><?= e($item['reorder_level']) ?></td>
                                     <td class="px-4 py-3 text-right text-gray-900 dark:text-white"><?= e(number_format((float) $item['price'], 2)) ?></td>
+                                    <td class="px-4 py-3 text-center">
+                                        <?php $isSale = (int) ($item['mark_as_sale'] ?? 0) === 1; ?>
+                                        <?php if ($canEdit): ?>
+                                            <form method="post" action="inventory.php" class="inline-flex">
+                                                <?= csrf_field() ?>
+                                                <input type="hidden" name="action" value="toggle_sale">
+                                                <input type="hidden" name="id" value="<?= (int) $item['id'] ?>">
+                                                <?php if ($seesAll): ?><input type="hidden" name="branch_id" value="<?= (int) $item['branch_id'] ?>"><?php endif; ?>
+                                                <input type="hidden" name="fb" value="<?= (int) $filterBranch ?>">
+                                                <input type="checkbox" title="<?= e(__('inv_mark_sale_hint')) ?>" onchange="this.form.submit()" <?= $isSale ? 'checked' : '' ?>
+                                                       class="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500 cursor-pointer">
+                                            </form>
+                                        <?php else: ?>
+                                            <span class="inline-flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold <?= $isSale ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'text-gray-300 dark:text-gray-600' ?>"><?= $isSale ? '&check;' : '&minus;' ?></span>
+                                        <?php endif; ?>
+                                    </td>
                                     <td class="px-4 py-3">
                                         <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold
                                             <?= $isLow

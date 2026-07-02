@@ -364,6 +364,19 @@ function unread_notification_count(): int
     } catch (Throwable $e) { return 0; }
 }
 
+/* Unread user-feedback reports for the current user (agency team receives these).
+ * Powers the badge on the "Have a problem?" sidebar link. */
+function unread_feedback_count(): int
+{
+    global $pdo;
+    if (!is_logged_in()) { return 0; }
+    try {
+        $s = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0 AND type = 'feedback'");
+        $s->execute([$_SESSION['user_id']]);
+        return (int) $s->fetchColumn();
+    } catch (Throwable $e) { return 0; }
+}
+
 /* Supplier logins are confined to their own portal (+ their notifications/account). */
 if (is_logged_in() && current_role() === 'supplier') {
     $allowedSupplierPages = ['supplier.php', 'notifications.php', 'profile.php'];
