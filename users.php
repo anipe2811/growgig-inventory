@@ -76,18 +76,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $chk->execute([$email, $id]);
         if ($chk->fetch()) { header('Location: users.php?msg=taken'); exit; }
         if ($pass !== '') {
-            $pdo->prepare("UPDATE users SET name=?, email=?, branch_id=?, password=? WHERE id=? AND role='account_user'")
-                ->execute([$name, $email, $branch, password_hash($pass, PASSWORD_DEFAULT), $id]);
+            $pdo->prepare("UPDATE users SET name=?, email=?, branch_id=?, password=? WHERE id=? AND role='account_user' AND account_id = ?")
+                ->execute([$name, $email, $branch, password_hash($pass, PASSWORD_DEFAULT), $id, $acctId]);
         } else {
-            $pdo->prepare("UPDATE users SET name=?, email=?, branch_id=? WHERE id=? AND role='account_user'")
-                ->execute([$name, $email, $branch, $id]);
+            $pdo->prepare("UPDATE users SET name=?, email=?, branch_id=? WHERE id=? AND role='account_user' AND account_id = ?")
+                ->execute([$name, $email, $branch, $id, $acctId]);
         }
         header('Location: users.php?msg=user_updated'); exit;
     }
 
     if ($action === 'delete_user') {
         $id = (int) ($_POST['id'] ?? 0);
-        $pdo->prepare("DELETE FROM users WHERE id = ? AND role = 'account_user'")->execute([$id]);
+        $pdo->prepare("DELETE FROM users WHERE id = ? AND role = 'account_user' AND account_id = ?")->execute([$id, $acctId]);
         header('Location: users.php?msg=deleted'); exit;
     }
 
@@ -142,18 +142,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $chk->execute([$email, $id]);
         if ($chk->fetch()) { header('Location: users.php?msg=taken'); exit; }
         if ($pass !== '') {
-            $pdo->prepare("UPDATE users SET name=?, email=?, supplier_id=?, password=? WHERE id=? AND role='supplier'")
-                ->execute([$name, $email, $supplier, password_hash($pass, PASSWORD_DEFAULT), $id]);
+            $pdo->prepare("UPDATE users SET name=?, email=?, supplier_id=?, password=? WHERE id=? AND role='supplier' AND account_id = ?")
+                ->execute([$name, $email, $supplier, password_hash($pass, PASSWORD_DEFAULT), $id, $acctId]);
         } else {
-            $pdo->prepare("UPDATE users SET name=?, email=?, supplier_id=? WHERE id=? AND role='supplier'")
-                ->execute([$name, $email, $supplier, $id]);
+            $pdo->prepare("UPDATE users SET name=?, email=?, supplier_id=? WHERE id=? AND role='supplier' AND account_id = ?")
+                ->execute([$name, $email, $supplier, $id, $acctId]);
         }
         header('Location: users.php?msg=sup_user_updated'); exit;
     }
 
     if ($action === 'delete_supplier_user') {
         $id = (int) ($_POST['id'] ?? 0);
-        $pdo->prepare("DELETE FROM users WHERE id = ? AND role = 'supplier'")->execute([$id]);
+        $pdo->prepare("DELETE FROM users WHERE id = ? AND role = 'supplier' AND account_id = ?")->execute([$id, $acctId]);
         header('Location: users.php?msg=sup_deleted'); exit;
     }
 
@@ -173,7 +173,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ((int) $uc->fetchColumn() > 0 || (int) $ic->fetchColumn() > 0) {
             header('Location: users.php?msg=branch_in_use'); exit;
         }
-        $pdo->prepare('DELETE FROM branches WHERE id = ?')->execute([$id]);
+        $pdo->prepare('DELETE FROM branches WHERE id = ? AND account_id = ?')->execute([$id, $acctId]);
         header('Location: users.php?msg=branch_removed'); exit;
     }
 
@@ -187,7 +187,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: users.php?msg=supplier_added'); exit;
     }
     if ($action === 'delete_supplier') {
-        $pdo->prepare('DELETE FROM suppliers WHERE id = ?')->execute([(int) ($_POST['id'] ?? 0)]);
+        $pdo->prepare('DELETE FROM suppliers WHERE id = ? AND account_id = ?')->execute([(int) ($_POST['id'] ?? 0), $acctId]);
         header('Location: users.php?msg=supplier_removed'); exit;
     }
 
@@ -227,14 +227,14 @@ $supplierUsers = $supplierUsersStmt->fetchAll();
 
 $editUser = null;
 if (isset($_GET['edit_user'])) {
-    $eu = $pdo->prepare("SELECT id, name, email, branch_id FROM users WHERE id = ? AND role = 'account_user'");
-    $eu->execute([(int) $_GET['edit_user']]);
+    $eu = $pdo->prepare("SELECT id, name, email, branch_id FROM users WHERE id = ? AND role = 'account_user' AND account_id = ?");
+    $eu->execute([(int) $_GET['edit_user'], $acctId]);
     $editUser = $eu->fetch() ?: null;
 }
 $editSupplierUser = null;
 if (isset($_GET['edit_supplier_user'])) {
-    $es = $pdo->prepare("SELECT id, name, email, supplier_id FROM users WHERE id = ? AND role = 'supplier'");
-    $es->execute([(int) $_GET['edit_supplier_user']]);
+    $es = $pdo->prepare("SELECT id, name, email, supplier_id FROM users WHERE id = ? AND role = 'supplier' AND account_id = ?");
+    $es->execute([(int) $_GET['edit_supplier_user'], $acctId]);
     $editSupplierUser = $es->fetch() ?: null;
 }
 
