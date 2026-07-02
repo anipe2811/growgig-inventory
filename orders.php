@@ -29,6 +29,8 @@ $acct         = current_account_id(); // non-null = restrict to this account; nu
 // Extra guard fragment restricting manager order mutations to the acting account's
 // branches (empty = agency "all accounts"). $acct is an int, so inlining is injection-safe.
 $acctOrderClause = $acct ? ' AND branch_id IN (SELECT id FROM branches WHERE account_id = ' . (int) $acct . ')' : '';
+// Same idea for the suppliers table: append to a WHERE ... id = ? clause. $acct is an int, so inlining is injection-safe.
+$acctSupClause = $acct ? ' AND account_id = ' . (int) $acct : '';
 
 /* Branch scope: managers see all branches; a branch user is locked to their own. */
 if ($canManage) {
@@ -45,11 +47,17 @@ if ($canManage) {
     $branches = $bs->fetchAll();
 }
 $validBranchIds = array_map(static fn($b) => (int) $b['id'], $branches);
-$suppliers      = $pdo->query('SELECT id, name, email, phone FROM suppliers ORDER BY name ASC')->fetchAll();
+if ($acct) {
+    $sst = $pdo->prepare('SELECT id, name, email, phone FROM suppliers WHERE account_id = ? ORDER BY name ASC');
+    $sst->execute([$acct]);
+    $suppliers = $sst->fetchAll();
+} else {
+    $suppliers = $pdo->query('SELECT id, name, email, phone FROM suppliers ORDER BY name ASC')->fetchAll();
+}
 
 $editSupplier = null;
 if ($canManage && isset($_GET['edit_supplier'])) {
-    $es = $pdo->prepare('SELECT id, name, email, phone FROM suppliers WHERE id = ?');
+    $es = $pdo->prepare('SELECT id, name, email, phone FROM suppliers WHERE id = ?' . $acctSupClause);
     $es->execute([(int) $_GET['edit_supplier']]);
     $editSupplier = $es->fetch() ?: null;
 }
@@ -87,10 +95,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     /* Manager: add supplier. */
     if ($action === 'add_supplier' && $canManage) {
+        if ($acct === null) { header('Location: orders.php?msg=pick_account'); exit; }
         $name = trim($_POST['name'] ?? '');
         if ($name !== '') {
-            $pdo->prepare('INSERT INTO suppliers (name, email, phone) VALUES (?, ?, ?)')
-                ->execute([$name, trim($_POST['email'] ?? ''), trim($_POST['phone'] ?? '')]);
+            $pdo->prepare('INSERT INTO suppliers (name, email, phone, account_id) VALUES (?, ?, ?, ?)')
+                ->execute([$name, trim($_POST['email'] ?? ''), trim($_POST['phone'] ?? ''), $acct]);
         }
         header('Location: ' . $redirectBase . '&msg=sup_added'); exit;
     }
@@ -100,13 +109,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $id   = (int) ($_POST['id'] ?? 0);
         $name = trim($_POST['name'] ?? '');
         if ($id > 0 && $name !== '') {
-            $pdo->prepare('UPDATE suppliers SET name=?, email=?, phone=? WHERE id=?')
+            $pdo->prepare('UPDATE suppliers SET name=?, email=?, phone=? WHERE id=?' . $acctSupClause)
                 ->execute([$name, trim($_POST['email'] ?? ''), trim($_POST['phone'] ?? ''), $id]);
         }
         header('Location: ' . $redirectBase . '&msg=sup_updated'); exit;
     }
     if ($action === 'delete_supplier' && $canManage) {
-        $pdo->prepare('DELETE FROM suppliers WHERE id = ?')->execute([(int) ($_POST['id'] ?? 0)]);
+        $pdo->prepare('DELETE FROM suppliers WHERE id = ?' . $acctSupClause)->execute([(int) ($_POST['id'] ?? 0)]);
         header('Location: ' . $redirectBase . '&msg=sup_removed'); exit;
     }
 
@@ -121,6 +130,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $supplierId = (int) ($_POST['supplier_id'] ?? 0);
         if (!in_array($branchId, $validBranchIds, true) || $supplierId <= 0) {
             header('Location: ' . $redirectBase . '&msg=invalid'); exit;
+        }
+        if ($acct) {
+            $chk = $pdo->prepare('SELECT id FROM suppliers WHERE id = ? AND account_id = ?');
+            $chk->execute([$supplierId, $acct]);
+            if (!$chk->fetch()) { header('Location: ' . $redirectBase . '&msg=denied'); exit; }
         }
         $lines = $buildLines($branchId, $_POST['qty'] ?? null);
         if (!$lines) { header('Location: ' . $redirectBase . '&msg=empty'); exit; }
@@ -415,6 +429,7 @@ $flashMap = [
     'invalid'     => ['err_fill_all',   'red'],
     'denied'      => ['inv_not_allowed','red'],
     'frozen'      => ['stock_frozen',   'red'],
+    'pick_account'=> ['acct_pick_first','red'],
 ];
 $flash = $flashMap[$_GET['msg'] ?? ''] ?? null;
 
