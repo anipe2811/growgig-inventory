@@ -44,6 +44,6 @@ WHERE NOT EXISTS (SELECT 1 FROM `accounts`);
 
 UPDATE `branches`      SET `account_id` = 1 WHERE `account_id` IS NULL;
 UPDATE `suppliers`     SET `account_id` = 1 WHERE `account_id` IS NULL;
-UPDATE `subscriptions` SET `account_id` = 1 WHERE `account_id` IS NULL;
+UPDATE `subscriptions` SET `account_id` = 1 WHERE `account_id` IS NULL ORDER BY `id` ASC LIMIT 1;
 UPDATE `users` SET `account_id` = 1
   WHERE `account_id` IS NULL AND `role` NOT IN ('agency_admin','agency_user');

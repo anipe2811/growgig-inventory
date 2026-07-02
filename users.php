@@ -111,8 +111,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $email    = trim($_POST['email'] ?? '');
         $pass     = $_POST['password'] ?? '';
         $supplier = (int) ($_POST['supplier_id'] ?? 0);
-        $chkSup   = $pdo->prepare('SELECT id FROM suppliers WHERE id = ?');
-        $chkSup->execute([$supplier]);
+        $chkSup   = $pdo->prepare('SELECT id FROM suppliers WHERE id = ? AND account_id = ?');
+        $chkSup->execute([$supplier, $acctId]);
         if ($name === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($pass) < 6 || !$chkSup->fetch()) {
             header('Location: users.php?msg=invalid'); exit;
         }
@@ -130,8 +130,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $email    = trim($_POST['email'] ?? '');
         $pass     = $_POST['password'] ?? '';
         $supplier = (int) ($_POST['supplier_id'] ?? 0);
-        $chkSup   = $pdo->prepare('SELECT id FROM suppliers WHERE id = ?');
-        $chkSup->execute([$supplier]);
+        $chkSup   = $pdo->prepare('SELECT id FROM suppliers WHERE id = ? AND account_id = ?');
+        $chkSup->execute([$supplier, $acctId]);
         if ($name === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || !$chkSup->fetch() || ($pass !== '' && strlen($pass) < 6)) {
             header('Location: users.php?msg=invalid'); exit;
         }
