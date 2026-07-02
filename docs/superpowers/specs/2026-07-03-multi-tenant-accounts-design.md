@@ -148,9 +148,10 @@ Visible to agency roles only; new sidebar entry "Accounts".
   `current_brand()` reads the acting/owning account's brand, agency "enter
   account" full impersonation.
 
-## 11. Open question
+## 11. Resolved decisions
 
-Account context switching for agency: **(a)** a persistent dropdown switcher in
-the sidebar (recommended — always visible, low friction), vs **(b)** an
-enter/exit flow from the Accounts list only. Recommendation: **(a)**, with an
-"All accounts" option for aggregate views.
+**Account context switching (agency):** a persistent dropdown switcher in the
+sidebar, always visible, with an "All accounts" option for aggregate views.
+Selection persists in the session (`acting_account_id`) and can also be set via
+`?account=<id>`. Branch-level pages that require a single account prompt the
+agency user to pick one when "All accounts" is active.
