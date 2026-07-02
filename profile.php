@@ -119,7 +119,7 @@ require __DIR__ . '/includes/header.php';
             <div class="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-8 flex items-center justify-between gap-4">
                 <div class="flex items-center gap-4">
                     <?php if (!empty($user['avatar'])): ?>
-                        <img src="<?= e($user['avatar']) ?>" alt="<?= e($user['name']) ?>" class="w-16 h-16 rounded-full object-cover ring-2 ring-white/40 bg-white shrink-0">
+                        <img src="<?= e($user['avatar']) ?>" alt="<?= e($user['name']) ?>" class="w-16 h-16 rounded-full object-contain p-1.5 ring-2 ring-white/40 bg-white shrink-0">
                     <?php else: ?>
                         <div class="w-16 h-16 rounded-full bg-white/20 text-white flex items-center justify-center text-2xl font-bold ring-2 ring-white/40 shrink-0">
                             <?= e($initials) ?>
@@ -148,7 +148,7 @@ require __DIR__ . '/includes/header.php';
                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"><?= e(__('profile_photo')) ?></label>
                         <div class="flex items-center gap-3">
                             <?php if (!empty($user['avatar'])): ?>
-                                <img src="<?= e($user['avatar']) ?>" alt="" class="w-12 h-12 rounded-lg object-cover ring-1 ring-gray-200 dark:ring-gray-600 bg-white shrink-0">
+                                <img src="<?= e($user['avatar']) ?>" alt="" class="w-12 h-12 rounded-lg object-contain p-1 ring-1 ring-gray-200 dark:ring-gray-600 bg-white shrink-0">
                             <?php endif; ?>
                             <input type="file" name="avatar" accept="image/png,image/jpeg,image/webp,image/gif"
                                    class="block w-full text-sm text-gray-600 dark:text-gray-300 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 dark:file:bg-indigo-900/40 dark:file:text-indigo-300 hover:file:bg-indigo-100 cursor-pointer">

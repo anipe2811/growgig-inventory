@@ -74,6 +74,13 @@ $IC = [
     </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>tailwind.config = { darkMode: 'class' };</script>
+    <link rel="icon" type="image/png" href="<?= e($brand['logo']) ?>">
+    <?php if ($brand['key'] === 'growgig'): ?>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;600;700&display=swap" rel="stylesheet">
+    <style>.brand-font { font-family:'Orbitron',sans-serif; font-weight:600; letter-spacing:.01em }</style>
+    <?php endif; ?>
 </head>
 <body class="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100 transition-colors duration-300 <?= is_logged_in() ? '' : 'flex flex-col' ?>">
 
@@ -83,9 +90,9 @@ $IC = [
     <!-- ===================== Sidebar ===================== -->
     <aside id="sidebar" class="fixed lg:sticky inset-y-0 left-0 lg:top-0 z-50 h-screen w-64 shrink-0 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col -translate-x-full lg:translate-x-0 transition-transform duration-200">
         <!-- Brand -->
-        <a href="dashboard.php" class="h-16 flex items-center gap-2.5 px-5 border-b border-gray-200 dark:border-gray-700 shrink-0">
-            <span class="inline-flex items-center justify-center rounded-lg bg-white p-1 ring-1 ring-gray-200 dark:ring-gray-700">
-                <img src="<?= e($brand['logo']) ?>" alt="<?= e($brand['name']) ?>" class="h-8 w-8 object-contain">
+        <a href="dashboard.php" class="h-16 flex items-center gap-2 px-4 border-b border-gray-200 dark:border-gray-700 shrink-0">
+            <span class="inline-flex items-center justify-center rounded-lg<?= $brand['key'] === 'growgig' ? ' dark:bg-white dark:p-1' : '' ?>">
+                <img src="<?= e($brand['logo']) ?>" alt="<?= e($brand['name']) ?>" class="h-11 w-11 object-contain">
             </span>
             <span class="font-semibold text-sm <?= $brand['accent'] ?> leading-tight"><?= e($brand['nav_name']) ?></span>
         </a>
@@ -156,11 +163,18 @@ $IC = [
     <!-- ===================== Logged-out top bar ===================== -->
     <nav class="bg-white/90 dark:bg-gray-800/90 backdrop-blur border-b border-gray-200 dark:border-gray-700 sticky top-0 z-40 transition-colors">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
-            <a href="index.php" class="flex items-center gap-2 shrink-0">
-                <span class="inline-flex items-center justify-center rounded-lg bg-white p-1 ring-1 ring-gray-200 dark:ring-gray-700">
-                    <img src="<?= e($brand['logo']) ?>" alt="<?= e($brand['name']) ?>" class="h-9 w-9 object-contain">
+            <a href="index.php" class="flex items-center gap-1.5 shrink-0">
+                <span class="inline-flex items-center justify-center rounded-xl dark:bg-white dark:p-1 dark:ring-1 dark:ring-gray-700">
+                    <img src="<?= e($brand['logo']) ?>" alt="<?= e($brand['name']) ?>" class="h-14 w-14 object-contain">
                 </span>
+                <?php if ($brand['key'] === 'growgig'): ?>
+                <span class="leading-tight">
+                    <span class="block brand-font text-xl leading-none pb-1 bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent"><?= e($brand['nav_name']) ?></span>
+                    <span class="block text-[10.5px] font-medium tracking-wide text-gray-400 dark:text-gray-500"><?= e(__('gg_brand_tagline')) ?></span>
+                </span>
+                <?php else: ?>
                 <span class="font-semibold <?= $brand['accent'] ?> hidden sm:block"><?= e($brand['nav_name']) ?></span>
+                <?php endif; ?>
             </a>
             <div class="flex items-center gap-2">
                 <a href="login.php"    class="<?= nav_link_class('login.php', $current) ?>"><?= __('nav_login') ?></a>

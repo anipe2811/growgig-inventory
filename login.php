@@ -50,8 +50,8 @@ require __DIR__ . '/includes/header.php';
 <section class="max-w-md mx-auto px-4 py-12 sm:py-16">
     <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 sm:p-8 transition-colors">
         <div class="flex justify-center mb-5">
-            <span class="inline-flex items-center justify-center bg-white rounded-2xl p-2 ring-1 ring-gray-200 dark:ring-gray-700">
-                <img src="<?= e(current_brand()['logo']) ?>" alt="<?= e(current_brand()['name']) ?>" class="h-20 w-20 object-contain">
+            <span class="inline-flex items-center justify-center rounded-2xl dark:bg-white dark:p-3 dark:ring-1 dark:ring-gray-700">
+                <img src="<?= current_brand()['key'] === 'growgig' ? 'assets/logo-growgig-full.png' : e(current_brand()['logo']) ?>" alt="<?= e(current_brand()['name']) ?>" class="h-28 w-auto object-contain">
             </span>
         </div>
         <h1 class="text-2xl font-bold text-gray-900 dark:text-white"><?= e(__('login_title')) ?></h1>

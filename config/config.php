@@ -194,14 +194,14 @@ function current_brand(): array
         'key'      => 'growgig',
         'name'     => 'GrowGig',
         'nav_name' => 'GrowGig',
-        'logo'     => 'assets/logo-growgig.jpg',
+        'logo'     => 'assets/logo-growgig.png',
         'accent'   => 'text-blue-600 dark:text-blue-400',
     ];
     $aktifotak = [
         'key'      => 'aktifotak',
         'name'     => 'Aktifotak',
         'nav_name' => 'Aktifotak Group Sdn Bhd',
-        'logo'     => 'assets/logo.jpg',
+        'logo'     => 'assets/logo-aktifotak.png',
         'accent'   => 'text-red-600 dark:text-red-400',
     ];
     if (is_logged_in() && !role_is_agency($_SESSION['user_role'] ?? '')) {

@@ -19,6 +19,7 @@ $activeLang = current_lang();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GrowGig Inventory System (GIS)</title>
+    <link rel="icon" type="image/png" href="assets/logo-growgig.png">
 
     <script>
         (function () {
@@ -33,7 +34,7 @@ $activeLang = current_lang();
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&family=Orbitron:wght@500;600;700&display=swap" rel="stylesheet">
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -57,7 +58,7 @@ $activeLang = current_lang();
         .marquee-track { animation: marquee 30s linear infinite; width: max-content }
         .marquee-wrap:hover .marquee-track { animation-play-state: paused }
         @font-face { font-family:'Calipso'; src:url('assets/fonts/calipso-regular.woff2') format('woff2'), url('assets/fonts/calipso-regular.ttf') format('truetype'); font-weight:400; font-style:normal; font-display:swap }
-        .brand-font { font-family:'Calipso','Plus Jakarta Sans',sans-serif; font-weight:400 }
+        .brand-font { font-family:'Orbitron','Plus Jakarta Sans',sans-serif; font-weight:600; letter-spacing:.01em }
         details > summary { list-style:none }
         details > summary::-webkit-details-marker { display:none }
         html { scroll-behavior:smooth }
@@ -69,13 +70,13 @@ $activeLang = current_lang();
 <nav class="sticky top-0 z-50 bg-white/80 dark:bg-gray-950/80 backdrop-blur-xl border-b border-gray-100 dark:border-gray-800/80 transition-colors">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex items-center justify-between h-[4.5rem]">
-            <a href="index.php" class="flex items-center gap-3 shrink-0">
-                <span class="inline-flex items-center justify-center rounded-xl bg-white p-1.5 ring-1 ring-gray-200 dark:ring-gray-700 shadow-sm">
-                    <img src="<?= e($brand['logo']) ?>" alt="GrowGig" class="h-9 w-9 object-contain">
+            <a href="index.php" class="flex items-center gap-1.5 shrink-0">
+                <span class="inline-flex items-center justify-center rounded-xl dark:bg-white dark:p-1 dark:ring-1 dark:ring-gray-700">
+                    <img src="<?= e($brand['logo']) ?>" alt="GrowGig" class="h-14 w-14 object-contain">
                 </span>
                 <span class="leading-tight">
-                    <span class="block brand-font text-2xl leading-none bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">GrowGig</span>
-                    <span class="block text-[10.5px] font-medium tracking-wide text-gray-400 dark:text-gray-500 -mt-0.5"><?= e(__('gg_brand_tagline')) ?></span>
+                    <span class="block brand-font text-xl leading-none pb-1 bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">GrowGig</span>
+                    <span class="block text-[10.5px] font-medium tracking-wide text-gray-400 dark:text-gray-500"><?= e(__('gg_brand_tagline')) ?></span>
                 </span>
             </a>
 
@@ -580,11 +581,11 @@ $activeLang = current_lang();
 <footer class="bg-gray-950 text-gray-300 border-t border-gray-800">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
         <div>
-            <div class="flex items-center gap-3">
-                <span class="inline-flex items-center justify-center rounded-xl bg-white p-1.5"><img src="<?= e($brand['logo']) ?>" alt="GrowGig" class="h-9 w-9 object-contain"></span>
+            <div class="flex items-center gap-1.5">
+                <span class="inline-flex items-center justify-center rounded-xl bg-white p-1"><img src="<?= e($brand['logo']) ?>" alt="GrowGig" class="h-12 w-12 object-contain"></span>
                 <span class="leading-tight">
-                    <span class="block brand-font text-xl text-white">GrowGig</span>
-                    <span class="block text-[10.5px] font-medium tracking-wide text-gray-500 -mt-0.5"><?= e(__('gg_brand_tagline')) ?></span>
+                    <span class="block brand-font text-lg text-white">GrowGig</span>
+                    <span class="block text-[10.5px] font-medium tracking-wide text-gray-500 mt-1"><?= e(__('gg_brand_tagline')) ?></span>
                 </span>
             </div>
             <p class="mt-4 text-sm text-gray-400 max-w-xs"><?= e(__('gg_foot_blurb')) ?></p>
