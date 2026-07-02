@@ -11,7 +11,9 @@ require_once __DIR__ . '/config/config.php';
 require_login();
 require_once __DIR__ . '/includes/notifications_ui.php';
 
-$uid = (int) $_SESSION['user_id'];
+$uid  = (int) $_SESSION['user_id'];
+// Agency sees only system-management notices; branch/order noise is hidden.
+$typeFilter = notif_type_filter_sql($_SESSION['user_role'] ?? '');
 
 /* Mark-as-read actions (shared by this page and the dashboard panel). */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -19,7 +21,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (csrf_verify()) {
         $action = (string) ($_POST['action'] ?? '');
         if ($action === 'mark_all') {
-            $pdo->prepare('UPDATE notifications SET is_read = 1 WHERE user_id = ? AND is_read = 0')->execute([$uid]);
+            // Only mark what this role actually sees (agency: management types only).
+            $pdo->prepare('UPDATE notifications SET is_read = 1 WHERE user_id = ? AND is_read = 0' . $typeFilter)->execute([$uid]);
         } elseif ($action === 'mark_one') {
             $pdo->prepare('UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?')
                 ->execute([(int) ($_POST['id'] ?? 0), $uid]);
@@ -30,7 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 /* Full list (newest first). */
-$stmt = $pdo->prepare('SELECT id, type, title, body, link, is_read, created_at FROM notifications WHERE user_id = ? ORDER BY id DESC LIMIT 100');
+$stmt = $pdo->prepare('SELECT id, type, title, body, link, is_read, created_at FROM notifications WHERE user_id = ?' . $typeFilter . ' ORDER BY id DESC LIMIT 100');
 $stmt->execute([$uid]);
 $list = $stmt->fetchAll();
 

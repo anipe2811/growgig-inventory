@@ -353,12 +353,24 @@ function notify_supplier_users(int $supplierId, string $title, string $body = ''
     } catch (Throwable $e) { /* best-effort */ }
 }
 
+/* Notification types the agency team sees. Agency is the SaaS operator, so it
+ * only cares about system-management notices (system / software / feedback), not
+ * per-branch operational noise like stock-order updates. Returns a SQL fragment
+ * (leading " AND ...") to append to a notifications query, or '' for non-agency. */
+function notif_type_filter_sql(?string $role): string
+{
+    return role_is_agency($role)
+        ? " AND type IN ('system', 'software', 'feedback')"
+        : '';
+}
+
 function unread_notification_count(): int
 {
     global $pdo;
     if (!is_logged_in()) { return 0; }
     try {
-        $s = $pdo->prepare('SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0');
+        $filter = notif_type_filter_sql($_SESSION['user_role'] ?? '');
+        $s = $pdo->prepare('SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0' . $filter);
         $s->execute([$_SESSION['user_id']]);
         return (int) $s->fetchColumn();
     } catch (Throwable $e) { return 0; }
