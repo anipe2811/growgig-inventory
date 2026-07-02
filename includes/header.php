@@ -105,6 +105,9 @@ $IC = [
                 <?= sidebar_link('notifications.php', $current, __('nav_notifications'), $IC['bell'], $unread) ?>
                 <?= sidebar_link('profile.php', $current, __('nav_profile'), $IC['user']) ?>
             <?php else: ?>
+                <?php if (role_is_agency($role)): ?>
+                    <?= sidebar_link('accounts.php', $current, __('nav_accounts'), $IC['users']) ?>
+                <?php endif; ?>
                 <?= sidebar_link('dashboard.php', $current, __('nav_dashboard'), $IC['home']) ?>
                 <?= sidebar_link('inventory.php', $current, __('nav_inventory'), $IC['box']) ?>
                 <?= sidebar_link('stock.php', $current, __('nav_stock'), $IC['swap']) ?>
@@ -131,6 +134,19 @@ $IC = [
                     <svg class="w-5 h-5 block dark:hidden" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
                 </button>
             </div>
+            <?php if (role_is_agency($role)): ?>
+                <?php $acctList = all_accounts(); $actingId = current_account_id(); ?>
+                <form method="get" class="mt-1">
+                    <label class="block text-[11px] font-semibold text-gray-400 mb-1"><?= e(__('acct_switcher')) ?></label>
+                    <select name="account" onchange="this.form.submit()"
+                            class="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-indigo-500 outline-none">
+                        <option value="0" <?= $actingId === null ? 'selected' : '' ?>><?= e(__('acct_all')) ?></option>
+                        <?php foreach ($acctList as $a): ?>
+                            <option value="<?= (int) $a['id'] ?>" <?= $actingId === (int) $a['id'] ? 'selected' : '' ?>><?= e($a['name']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </form>
+            <?php endif; ?>
             <div class="flex items-center text-xs font-semibold rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
                 <a href="?lang=en" class="flex-1 text-center px-2.5 py-1.5 <?= $activeLang === 'en' ? 'bg-indigo-600 text-white' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700' ?>">EN</a>
                 <a href="?lang=ms" class="flex-1 text-center px-2.5 py-1.5 <?= $activeLang === 'ms' ? 'bg-indigo-600 text-white' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700' ?>">MY</a>

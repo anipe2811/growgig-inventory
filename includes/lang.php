@@ -142,6 +142,9 @@ $LANG = [
         'mob_deleted'          => 'Trip deleted; inventory adjusted.',
         'mob_edited'           => 'Trip updated.',
         // Users & subscription / billing
+        'nav_accounts'     => 'Accounts',
+        'acct_switcher'    => 'Acting account',
+        'acct_all'         => 'All accounts',
         'nav_users'        => 'User',
         'quick_actions'    => 'Quick actions',
         'users_title'      => 'Account Users',
@@ -746,6 +749,9 @@ $LANG = [
         'mob_deleted'          => 'Perjalanan dipadam; inventori dikemas kini.',
         'mob_edited'           => 'Perjalanan dikemas kini.',
         // Pengguna & langganan / bil
+        'nav_accounts'     => 'Akaun',
+        'acct_switcher'    => 'Akaun aktif',
+        'acct_all'         => 'Semua akaun',
         'nav_users'        => 'Pengguna',
         'quick_actions'    => 'Tindakan pantas',
         'users_title'      => 'Pengguna Akaun',
