@@ -37,6 +37,11 @@ $validBranchIds = array_map(static fn($b) => (int) $b['id'], $branches);
  * ---------------------------------------------------------------------- */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!csrf_verify()) { header('Location: users.php?msg=denied'); exit; }
+
+    // Agency must have an acting account selected before mutating account data.
+    if (role_is_agency($role) && $acctId === null) {
+        header('Location: users.php?msg=pick_account'); exit;
+    }
     $action = $_POST['action'] ?? '';
 
     if ($action === 'create_user') {
@@ -157,7 +162,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $name = trim($_POST['name'] ?? '');
         $loc  = trim($_POST['location'] ?? '');
         if ($name !== '') {
-            $pdo->prepare('INSERT INTO branches (name, location) VALUES (?, ?)')->execute([$name, $loc !== '' ? $loc : null]);
+            $pdo->prepare('INSERT INTO branches (name, location, account_id) VALUES (?, ?, ?)')->execute([$name, $loc !== '' ? $loc : null, $acctId]);
         }
         header('Location: users.php?msg=branch_added'); exit;
     }
@@ -249,6 +254,7 @@ $flashMap = [
     'taken'            => ['err_email_taken',      'red'],
     'invalid'          => ['err_fill_all',         'red'],
     'denied'           => ['inv_not_allowed',      'red'],
+    'pick_account'     => ['acct_pick_first',      'red'],
 ];
 $flash = $flashMap[$_GET['msg'] ?? ''] ?? null;
 
