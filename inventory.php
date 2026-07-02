@@ -14,8 +14,15 @@ $seesAll    = role_sees_all_branches($role);
 $userBranch = isset($_SESSION['branch_id']) && $_SESSION['branch_id'] !== null ? (int) $_SESSION['branch_id'] : null;
 
 /* Branches this user may work with. */
+$acct = current_account_id();
 if ($seesAll) {
-    $branches = $pdo->query('SELECT id, name FROM branches ORDER BY name ASC')->fetchAll();
+    if ($acct) {
+        $st = $pdo->prepare('SELECT id, name FROM branches WHERE account_id = ? ORDER BY name ASC');
+        $st->execute([$acct]);
+        $branches = $st->fetchAll();
+    } else {
+        $branches = $pdo->query('SELECT id, name FROM branches ORDER BY name ASC')->fetchAll();
+    }
 } elseif ($userBranch) {
     $stmt = $pdo->prepare('SELECT id, name FROM branches WHERE id = ?');
     $stmt->execute([$userBranch]);
@@ -38,6 +45,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $action = $_POST['action'] ?? '';
 
+    // Extra WHERE fragment restricting seesAll item mutations to the current account's
+    // branches (empty = agency "all accounts"). Prevents cross-tenant IDOR via item id.
+    $acctItemClause = $acct ? ' AND branch_id IN (SELECT id FROM branches WHERE account_id = ' . (int) $acct . ')' : '';
+
     // Resolve the branch this action applies to.
     if ($seesAll) {
         $branchId = (int) ($_POST['branch_id'] ?? 0);
@@ -52,7 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'delete') {
         $id = (int) ($_POST['id'] ?? 0);
         if ($seesAll) {
-            $stmt = $pdo->prepare('DELETE FROM items WHERE id = ?');
+            $stmt = $pdo->prepare('DELETE FROM items WHERE id = ?' . $acctItemClause);
             $stmt->execute([$id]);
         } else {
             // Can only delete items inside their own branch.
@@ -67,7 +78,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'toggle_sale') {
         $id = (int) ($_POST['id'] ?? 0);
         if ($seesAll) {
-            $pdo->prepare('UPDATE items SET mark_as_sale = 1 - mark_as_sale WHERE id = ?')->execute([$id]);
+            $pdo->prepare('UPDATE items SET mark_as_sale = 1 - mark_as_sale WHERE id = ?' . $acctItemClause)->execute([$id]);
         } else {
             $pdo->prepare('UPDATE items SET mark_as_sale = 1 - mark_as_sale WHERE id = ? AND branch_id = ?')->execute([$id, $userBranch]);
         }
@@ -91,7 +102,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $id = (int) ($_POST['id'] ?? 0);
             if ($seesAll) {
                 $stmt = $pdo->prepare(
-                    'UPDATE items SET branch_id=?, name=?, sku=?, category=?, quantity=?, unit=?, reorder_level=?, price=?, mark_as_sale=?, notes=? WHERE id=?'
+                    'UPDATE items SET branch_id=?, name=?, sku=?, category=?, quantity=?, unit=?, reorder_level=?, price=?, mark_as_sale=?, notes=? WHERE id=?' . $acctItemClause
                 );
                 $stmt->execute([$branchId, $name, $sku, $category, $quantity, $unit, $reorder, $price, $markSale, $notes, $id]);
             } else {
@@ -127,7 +138,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $editItem = null;
 if ($canEdit && !$noBranch && isset($_GET['edit'])) {
     if ($seesAll) {
-        $stmt = $pdo->prepare('SELECT * FROM items WHERE id = ?');
+        // Extra WHERE fragment restricting to the current account's branches (empty = agency "all accounts").
+        $acctItemClause = $acct ? ' AND branch_id IN (SELECT id FROM branches WHERE account_id = ' . (int) $acct . ')' : '';
+        $stmt = $pdo->prepare('SELECT * FROM items WHERE id = ?' . $acctItemClause);
         $stmt->execute([(int) $_GET['edit']]);
     } else {
         $stmt = $pdo->prepare('SELECT * FROM items WHERE id = ? AND branch_id = ?');

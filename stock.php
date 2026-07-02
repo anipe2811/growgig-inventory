@@ -19,8 +19,15 @@ $seesAll    = role_sees_all_branches($role);
 $userBranch = isset($_SESSION['branch_id']) && $_SESSION['branch_id'] !== null ? (int) $_SESSION['branch_id'] : null;
 
 /* Branches available to this user. */
+$acct = current_account_id();
 if ($seesAll) {
-    $branches = $pdo->query('SELECT id, name FROM branches ORDER BY name ASC')->fetchAll();
+    if ($acct) {
+        $st = $pdo->prepare('SELECT id, name FROM branches WHERE account_id = ? ORDER BY name ASC');
+        $st->execute([$acct]);
+        $branches = $st->fetchAll();
+    } else {
+        $branches = $pdo->query('SELECT id, name FROM branches ORDER BY name ASC')->fetchAll();
+    }
 } elseif ($userBranch) {
     $st = $pdo->prepare('SELECT id, name FROM branches WHERE id = ?');
     $st->execute([$userBranch]);
