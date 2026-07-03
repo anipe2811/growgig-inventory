@@ -55,6 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$target || role_is_agency($target['role']) || (int) $target['account_id'] !== (int) current_account_id()) {
             header('Location: users.php?msg=denied'); exit;
         }
+        log_impersonation('start', (int) $_SESSION['user_id'], (string) ($_SESSION['user_name'] ?? ''), (int) $target['id'], (string) $target['name'], (int) $target['account_id']);
         session_regenerate_id(true); // Fix M-1: new session id on privilege switch
         $_SESSION['impersonator_id']   = (int) $_SESSION['user_id'];
         $_SESSION['impersonator_name'] = $_SESSION['user_name'] ?? 'Agency';
