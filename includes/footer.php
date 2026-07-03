@@ -15,7 +15,8 @@
         </p>
         <p class="text-sm text-gray-600 dark:text-gray-300 text-center sm:text-right">
             Email
-            <a href="mailto:hello@growgig.tech" class="font-medium text-indigo-600 dark:text-indigo-400 hover:underline">hello@growgig.tech</a>
+            <?php $brandEmail = current_brand()['email'] ?? 'hello@growgig.tech'; ?>
+            <a href="mailto:<?= e($brandEmail) ?>" class="font-medium text-indigo-600 dark:text-indigo-400 hover:underline"><?= e($brandEmail) ?></a>
         </p>
     </div>
 </footer>

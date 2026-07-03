@@ -115,6 +115,39 @@ if (isset($_GET['logout'])) {
 }
 
 /* -------------------------------------------------------------------------
+ * 5b. Stop impersonation (?stop_impersonate=1): restore the original agency identity.
+ * ---------------------------------------------------------------------- */
+if (isset($_GET['stop_impersonate']) && !empty($_SESSION['impersonator_id'])) {
+    global $pdo;
+    $impId = (int) $_SESSION['impersonator_id'];
+    try {
+        $st = $pdo->prepare('SELECT id, name, role, branch_id, account_id FROM users WHERE id = ?');
+        $st->execute([$impId]);
+        $u = $st->fetch();
+    } catch (Throwable $e) { $u = null; }
+    if ($u) {
+        $_SESSION['user_id']    = (int) $u['id'];
+        $_SESSION['user_name']  = $u['name'];
+        $_SESSION['user_role']  = $u['role'];
+        $_SESSION['branch_id']  = $u['branch_id'] !== null ? (int) $u['branch_id'] : null;
+        $_SESSION['account_id'] = $u['account_id'] !== null ? (int) $u['account_id'] : null;
+        unset($_SESSION['impersonator_id'], $_SESSION['impersonator_name'], $_SESSION['acting_account_id']);
+        session_regenerate_id(true);   // Fix M-1: new session id on privilege change
+        header('Location: dashboard.php');
+        exit;
+    }
+    // Impersonator user is gone: fail closed — never leave a headless account-user session.
+    $_SESSION = [];
+    if (ini_get('session.use_cookies')) {
+        $p = session_get_cookie_params();
+        setcookie(session_name(), '', time() - 42000, $p['path'], $p['domain'], $p['secure'], $p['httponly']);
+    }
+    session_destroy();
+    header('Location: login.php');
+    exit;
+}
+
+/* -------------------------------------------------------------------------
  * 6. Helpers — output escaping
  * ---------------------------------------------------------------------- */
 if (!function_exists('e')) {
@@ -130,6 +163,12 @@ if (!function_exists('e')) {
 function is_logged_in(): bool
 {
     return isset($_SESSION['user_id']);
+}
+
+/* Whether the current session is an agency_admin impersonating an account user. */
+function is_impersonating(): bool
+{
+    return !empty($_SESSION['impersonator_id']);
 }
 
 function require_login(): void
@@ -242,13 +281,13 @@ function role_sees_all_branches(?string $role): bool
  * ---------------------------------------------------------------------- */
 function current_brand(): array
 {
-    $growgig = ['key'=>'growgig','name'=>'GrowGig','nav_name'=>'GrowGig','logo'=>'assets/logo-growgig.png','accent'=>'text-blue-600 dark:text-blue-400'];
+    $growgig = ['key'=>'growgig','name'=>'GrowGig','nav_name'=>'GrowGig','logo'=>'assets/logo-growgig.png','accent'=>'text-blue-600 dark:text-blue-400','email'=>'hello@growgig.tech'];
     if (!is_logged_in()) { return $growgig; }
     $acctId = current_account_id();
     if (!$acctId) { return $growgig; } // agency "all accounts" (or no context)
     global $pdo;
     try {
-        $st = $pdo->prepare('SELECT name, brand_name, logo FROM accounts WHERE id = ?');
+        $st = $pdo->prepare('SELECT name, brand_name, logo, contact_email FROM accounts WHERE id = ?');
         $st->execute([$acctId]);
         $a = $st->fetch();
     } catch (Throwable $e) { $a = null; }
@@ -260,6 +299,7 @@ function current_brand(): array
         'nav_name' => $name,
         'logo'     => $a['logo'] ?: 'assets/logo-aktifotak.png',
         'accent'   => 'text-indigo-600 dark:text-indigo-400',
+        'email'    => ($a['contact_email'] ?: 'hello@growgig.tech'),
     ];
 }
 

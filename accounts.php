@@ -44,8 +44,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: accounts.php?msg=added'); exit;
         }
         $id = (int) ($_POST['id'] ?? 0);
+        $oldLogo = '';
+        $ol = $pdo->prepare('SELECT logo FROM accounts WHERE id = ?'); $ol->execute([$id]); $oldLogo = (string) $ol->fetchColumn();
         $pdo->prepare('UPDATE accounts SET name=?, brand_name=?, contact_email=?, whatsapp=?, logo = COALESCE(?, logo) WHERE id=?')
             ->execute([$name, $brand ?: $name, $email ?: null, $wa ?: null, $logoPath, $id]);
+        /* A new logo replaced the old one — delete the orphaned file (only ever
+         * from the per-account logos directory; never touch shared brand assets). */
+        if ($logoPath !== null && $oldLogo !== '' && str_starts_with($oldLogo, 'assets/account-logos/')) {
+            $abs = __DIR__ . '/' . $oldLogo;
+            if (is_file($abs)) { @unlink($abs); }
+        }
         header('Location: accounts.php?msg=updated'); exit;
     }
 

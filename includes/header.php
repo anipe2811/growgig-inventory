@@ -176,6 +176,12 @@ $IC = [
         </header>
 
         <main class="flex-1 w-full">
+            <?php if (is_impersonating()): ?>
+                <div class="sticky top-0 z-50 bg-amber-500 text-white text-sm font-semibold px-4 py-2 flex items-center justify-center gap-3">
+                    <span><?= e(__('imp_banner')) ?> <?= e($_SESSION['user_name'] ?? '') ?></span>
+                    <a href="?stop_impersonate=1" class="underline hover:no-underline"><?= e(__('imp_exit')) ?></a>
+                </div>
+            <?php endif; ?>
 <?php else: ?>
     <!-- ===================== Logged-out top bar ===================== -->
     <nav class="bg-white/90 dark:bg-gray-800/90 backdrop-blur border-b border-gray-200 dark:border-gray-700 sticky top-0 z-40 transition-colors">

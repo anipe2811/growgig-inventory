@@ -44,6 +44,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     $action = $_POST['action'] ?? '';
 
+    if ($action === 'impersonate') {
+        // Only agency_admin may impersonate; never while already impersonating.
+        if (!role_is_super($role) || is_impersonating()) { header('Location: users.php?msg=denied'); exit; }
+        $tid = (int) ($_POST['id'] ?? 0);
+        $t = $pdo->prepare('SELECT id, name, role, branch_id, account_id FROM users WHERE id = ?');
+        $t->execute([$tid]);
+        $target = $t->fetch();
+        // Target must exist, must NOT be an agency user, and must belong to the current acting account.
+        if (!$target || role_is_agency($target['role']) || (int) $target['account_id'] !== (int) current_account_id()) {
+            header('Location: users.php?msg=denied'); exit;
+        }
+        session_regenerate_id(true); // Fix M-1: new session id on privilege switch
+        $_SESSION['impersonator_id']   = (int) $_SESSION['user_id'];
+        $_SESSION['impersonator_name'] = $_SESSION['user_name'] ?? 'Agency';
+        $_SESSION['user_id']    = (int) $target['id'];
+        $_SESSION['user_name']  = $target['name'];
+        $_SESSION['user_role']  = $target['role'];
+        $_SESSION['branch_id']  = $target['branch_id'] !== null ? (int) $target['branch_id'] : null;
+        $_SESSION['account_id'] = (int) $target['account_id'];
+        unset($_SESSION['acting_account_id']); // the target's real account now governs
+        header('Location: dashboard.php'); exit;
+    }
+
     if ($action === 'create_user') {
         $name   = trim($_POST['name'] ?? '');
         $email  = trim($_POST['email'] ?? '');
@@ -433,6 +456,14 @@ require __DIR__ . '/includes/header.php';
                                 <td class="px-4 py-3 text-gray-500 dark:text-gray-400"><?= e(date('d/m/Y', strtotime($u['created_at']))) ?></td>
                                 <td class="px-4 py-3 text-right">
                                     <div class="flex items-center justify-end gap-2">
+                                        <?php if (role_is_super($role)): ?>
+                                            <form method="post">
+                                                <?= csrf_field() ?>
+                                                <input type="hidden" name="action" value="impersonate">
+                                                <input type="hidden" name="id" value="<?= (int) $u['id'] ?>">
+                                                <button type="submit" class="px-2.5 py-1 rounded-lg text-xs font-medium text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-colors"><?= e(__('btn_login_as')) ?></button>
+                                            </form>
+                                        <?php endif; ?>
                                         <a href="users.php?edit_user=<?= (int) $u['id'] ?>#user-form" class="px-2.5 py-1 rounded-lg text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors"><?= e(__('btn_edit')) ?></a>
                                         <form method="post" onsubmit="return confirm('<?= e(__('confirm_delete')) ?>');">
                                             <?= csrf_field() ?>
