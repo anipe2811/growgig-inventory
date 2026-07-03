@@ -131,9 +131,19 @@ if (isset($_GET['stop_impersonate']) && !empty($_SESSION['impersonator_id'])) {
         $_SESSION['user_role']  = $u['role'];
         $_SESSION['branch_id']  = $u['branch_id'] !== null ? (int) $u['branch_id'] : null;
         $_SESSION['account_id'] = $u['account_id'] !== null ? (int) $u['account_id'] : null;
+        unset($_SESSION['impersonator_id'], $_SESSION['impersonator_name'], $_SESSION['acting_account_id']);
+        session_regenerate_id(true);   // Fix M-1: new session id on privilege change
+        header('Location: dashboard.php');
+        exit;
     }
-    unset($_SESSION['impersonator_id'], $_SESSION['impersonator_name'], $_SESSION['acting_account_id']);
-    header('Location: dashboard.php');
+    // Impersonator user is gone: fail closed — never leave a headless account-user session.
+    $_SESSION = [];
+    if (ini_get('session.use_cookies')) {
+        $p = session_get_cookie_params();
+        setcookie(session_name(), '', time() - 42000, $p['path'], $p['domain'], $p['secure'], $p['httponly']);
+    }
+    session_destroy();
+    header('Location: login.php');
     exit;
 }
 
