@@ -634,6 +634,11 @@ $LANG = [
         'btn_delete'           => 'Delete',
         'confirm_delete'       => 'Are you sure you want to delete this item?',
 
+        // Impersonation ("Login as")
+        'imp_banner'           => 'Viewing as',
+        'imp_exit'             => 'Exit',
+        'btn_login_as'         => 'Login as',
+
         // Footer
         'footer_rights'        => 'All rights reserved.',
     ],
@@ -1257,6 +1262,11 @@ $LANG = [
         'btn_edit'             => 'Edit',
         'btn_delete'           => 'Padam',
         'confirm_delete'       => 'Adakah anda pasti mahu memadam item ini?',
+
+        // Impersonation ("Log masuk sebagai")
+        'imp_banner'           => 'Melihat sebagai',
+        'imp_exit'             => 'Keluar',
+        'btn_login_as'         => 'Log masuk sebagai',
 
         // Footer
         'footer_rights'        => 'Hak cipta terpelihara.',

@@ -115,6 +115,29 @@ if (isset($_GET['logout'])) {
 }
 
 /* -------------------------------------------------------------------------
+ * 5b. Stop impersonation (?stop_impersonate=1): restore the original agency identity.
+ * ---------------------------------------------------------------------- */
+if (isset($_GET['stop_impersonate']) && !empty($_SESSION['impersonator_id'])) {
+    global $pdo;
+    $impId = (int) $_SESSION['impersonator_id'];
+    try {
+        $st = $pdo->prepare('SELECT id, name, role, branch_id, account_id FROM users WHERE id = ?');
+        $st->execute([$impId]);
+        $u = $st->fetch();
+    } catch (Throwable $e) { $u = null; }
+    if ($u) {
+        $_SESSION['user_id']    = (int) $u['id'];
+        $_SESSION['user_name']  = $u['name'];
+        $_SESSION['user_role']  = $u['role'];
+        $_SESSION['branch_id']  = $u['branch_id'] !== null ? (int) $u['branch_id'] : null;
+        $_SESSION['account_id'] = $u['account_id'] !== null ? (int) $u['account_id'] : null;
+    }
+    unset($_SESSION['impersonator_id'], $_SESSION['impersonator_name'], $_SESSION['acting_account_id']);
+    header('Location: dashboard.php');
+    exit;
+}
+
+/* -------------------------------------------------------------------------
  * 6. Helpers — output escaping
  * ---------------------------------------------------------------------- */
 if (!function_exists('e')) {
@@ -130,6 +153,12 @@ if (!function_exists('e')) {
 function is_logged_in(): bool
 {
     return isset($_SESSION['user_id']);
+}
+
+/* Whether the current session is an agency_admin impersonating an account user. */
+function is_impersonating(): bool
+{
+    return !empty($_SESSION['impersonator_id']);
 }
 
 function require_login(): void
