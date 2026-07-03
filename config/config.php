@@ -243,6 +243,13 @@ function current_account_id(): ?int
     return ($a !== null && (int) $a > 0) ? (int) $a : null;
 }
 
+/* True when an agency user has no company selected and must pick one before
+ * stock-data pages will show anything. account roles always have an account. */
+function agency_needs_account(): bool
+{
+    return role_is_agency($_SESSION['user_role'] ?? '') && current_account_id() === null;
+}
+
 function account_name(?int $id): string
 {
     if (!$id) { return ''; }
