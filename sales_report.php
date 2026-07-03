@@ -9,8 +9,19 @@ require_login();
 $role       = $_SESSION['user_role'] ?? 'account_user';
 $seesAll    = role_sees_all_branches($role);
 $userBranch = isset($_SESSION['branch_id']) && $_SESSION['branch_id'] !== null ? (int) $_SESSION['branch_id'] : 0;
+$acct       = current_account_id(); // non-null = restrict to this account; null = agency "all accounts" (global)
 
-$branches = $seesAll ? $pdo->query('SELECT id, name FROM branches ORDER BY name ASC')->fetchAll() : [];
+if ($seesAll) {
+    if ($acct) {
+        $bst = $pdo->prepare('SELECT id, name FROM branches WHERE account_id = ? ORDER BY name ASC');
+        $bst->execute([$acct]);
+        $branches = $bst->fetchAll();
+    } else {
+        $branches = $pdo->query('SELECT id, name FROM branches ORDER BY name ASC')->fetchAll();
+    }
+} else {
+    $branches = [];
+}
 $validBranchIds = array_map(static fn($b) => (int) $b['id'], $branches);
 
 $filterBranch = 0;
@@ -37,6 +48,8 @@ if (!$toDate) { $toRaw = ''; }
  * For same-day trips (the clinic norm) it is always exact. HAVING drops zero/negative rows. */
 $cond = ["(m.type = 'out' OR (m.type = 'in' AND m.trip_id IS NOT NULL))"]; $params = [];
 if ($scopeBranch) { $cond[] = 'm.branch_id = ?';     $params[] = $scopeBranch; }
+// Default (no single branch): restrict to the acting account's branches. $acct is an int, so inlining is injection-safe.
+elseif ($acct)    { $cond[] = 'b.account_id = ' . (int) $acct; }
 if ($fromDate)    { $cond[] = 'm.movement_date >= ?'; $params[] = $fromDate; }
 if ($toDate)      { $cond[] = 'm.movement_date <= ?'; $params[] = $toDate; }
 // Sales only lists items flagged "Mark as Sale" in Inventory; everything else is excluded.

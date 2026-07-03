@@ -9,9 +9,24 @@ require_login();
 $role       = $_SESSION['user_role'] ?? 'account_user';
 $seesAll    = role_sees_all_branches($role);
 $userBranch = isset($_SESSION['branch_id']) && $_SESSION['branch_id'] !== null ? (int) $_SESSION['branch_id'] : null;
+$acct       = current_account_id(); // non-null = restrict to this account; null = agency "all accounts" (global)
 
-$branches = $seesAll ? $pdo->query('SELECT id, name FROM branches ORDER BY name ASC')->fetchAll() : [];
+if ($seesAll) {
+    if ($acct) {
+        $bst = $pdo->prepare('SELECT id, name FROM branches WHERE account_id = ? ORDER BY name ASC');
+        $bst->execute([$acct]);
+        $branches = $bst->fetchAll();
+    } else {
+        $branches = $pdo->query('SELECT id, name FROM branches ORDER BY name ASC')->fetchAll();
+    }
+} else {
+    $branches = [];
+}
 $validBranchIds = array_map(static fn($b) => (int) $b['id'], $branches);
+
+// Default (no single-branch filter) restriction to the acting account's branches.
+// $acct is an int, so inlining the subquery is injection-safe. Empty = agency "all accounts".
+$acctBranchSql = $acct ? ' branch_id IN (SELECT id FROM branches WHERE account_id = ' . (int) $acct . ')' : '';
 
 $filterBranch = 0;
 if ($seesAll && isset($_GET['branch']) && ctype_digit((string) $_GET['branch']) && in_array((int) $_GET['branch'], $validBranchIds, true)) {
@@ -25,8 +40,17 @@ if (!in_array($period, ['day', 'month', 'year'], true)) {
 }
 
 /* Current inventory summary (scoped). */
-$wi = $scopeBranch ? 'WHERE branch_id = ?' : '';
-$pi = $scopeBranch ? [$scopeBranch] : [];
+if ($scopeBranch) {
+    $wi = 'WHERE branch_id = ?';
+    $pi = [$scopeBranch];
+} elseif ($acctBranchSql) {
+    // No single branch chosen: limit to the acting account's branches (default no-filter path).
+    $wi = 'WHERE' . $acctBranchSql;
+    $pi = [];
+} else {
+    $wi = '';
+    $pi = [];
+}
 $sumStmt = $pdo->prepare("SELECT COUNT(*) AS items, COALESCE(SUM(quantity),0) AS qty,
     SUM(CASE WHEN quantity <= reorder_level THEN 1 ELSE 0 END) AS low,
     COALESCE(SUM(quantity * price),0) AS value FROM items $wi");
@@ -53,6 +77,8 @@ if ($period === 'day') {
 
 $cond = []; $pm = [];
 if ($scopeBranch) { $cond[] = 'm.branch_id = ?';     $pm[] = $scopeBranch; }
+// Default (no single branch): restrict to the acting account's branches.
+elseif ($acct)    { $cond[] = 'm.branch_id IN (SELECT id FROM branches WHERE account_id = ' . (int) $acct . ')'; }
 if ($fromDate)    { $cond[] = 'm.movement_date >= ?'; $pm[] = $fromDate; }
 if ($toDate)      { $cond[] = 'm.movement_date <= ?'; $pm[] = $toDate; }
 $wm = $cond ? 'WHERE ' . implode(' AND ', $cond) : '';
@@ -73,8 +99,17 @@ $rows = $rowsStmt->fetchAll();
 $grandIn = 0; $grandOut = 0;
 foreach ($rows as $r) { $grandIn += (int) $r['tin']; $grandOut += (int) $r['tout']; }
 
-/* Year bounds for the "By year" range picker. */
-$minYear = (int) ($pdo->query('SELECT MIN(YEAR(movement_date)) FROM stock_movements')->fetchColumn() ?: date('Y'));
+/* Year bounds for the "By year" range picker (scoped so it never reveals another account's history). */
+$minYearSql = 'SELECT MIN(YEAR(movement_date)) FROM stock_movements';
+if ($scopeBranch) {
+    $mys = $pdo->prepare($minYearSql . ' WHERE branch_id = ?');
+    $mys->execute([$scopeBranch]);
+    $minYear = (int) ($mys->fetchColumn() ?: date('Y'));
+} elseif ($acctBranchSql) {
+    $minYear = (int) ($pdo->query($minYearSql . ' WHERE' . $acctBranchSql)->fetchColumn() ?: date('Y'));
+} else {
+    $minYear = (int) ($pdo->query($minYearSql)->fetchColumn() ?: date('Y'));
+}
 $maxYear = (int) date('Y');
 if ($minYear > $maxYear) { $minYear = $maxYear; }
 

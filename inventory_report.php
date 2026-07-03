@@ -9,8 +9,19 @@ require_login();
 $role       = $_SESSION['user_role'] ?? 'account_user';
 $seesAll    = role_sees_all_branches($role);
 $userBranch = isset($_SESSION['branch_id']) && $_SESSION['branch_id'] !== null ? (int) $_SESSION['branch_id'] : 0;
+$acct       = current_account_id(); // non-null = restrict to this account; null = agency "all accounts" (global)
 
-$branches = $seesAll ? $pdo->query('SELECT id, name FROM branches ORDER BY name ASC')->fetchAll() : [];
+if ($seesAll) {
+    if ($acct) {
+        $bst = $pdo->prepare('SELECT id, name FROM branches WHERE account_id = ? ORDER BY name ASC');
+        $bst->execute([$acct]);
+        $branches = $bst->fetchAll();
+    } else {
+        $branches = $pdo->query('SELECT id, name FROM branches ORDER BY name ASC')->fetchAll();
+    }
+} else {
+    $branches = [];
+}
 $validBranchIds = array_map(static fn($b) => (int) $b['id'], $branches);
 
 $filterBranch = 0;
@@ -20,8 +31,17 @@ if ($seesAll && isset($_GET['branch']) && ctype_digit((string) $_GET['branch']) 
 $scopeBranch = $seesAll ? $filterBranch : $userBranch; // 0 = all branches (managers)
 
 /* Items with value. */
-$wi = $scopeBranch ? 'WHERE i.branch_id = ?' : '';
-$pi = $scopeBranch ? [$scopeBranch] : [];
+if ($scopeBranch) {
+    $wi = 'WHERE i.branch_id = ?';
+    $pi = [$scopeBranch];
+} elseif ($acct) {
+    // Default (no single branch): restrict to the acting account's branches. $acct is an int, injection-safe.
+    $wi = 'WHERE b.account_id = ' . (int) $acct;
+    $pi = [];
+} else {
+    $wi = '';
+    $pi = [];
+}
 $stmt = $pdo->prepare(
     "SELECT i.name, i.category, i.quantity, i.unit, i.reorder_level, i.price, b.name AS branch
      FROM items i LEFT JOIN branches b ON b.id = i.branch_id $wi

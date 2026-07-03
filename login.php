@@ -33,6 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['user_name'] = $user['name'];
                 $_SESSION['user_role'] = $user['role'];
                 $_SESSION['branch_id'] = $user['branch_id'] !== null ? (int) $user['branch_id'] : null;
+                $_SESSION['account_id'] = $user['account_id'] !== null ? (int) $user['account_id'] : null;
                 $_SESSION['lang']      = current_lang();
 
                 header('Location: dashboard.php');

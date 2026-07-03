@@ -90,11 +90,21 @@ if (!isset($_SESSION['lang'])) {
     $_SESSION['lang'] = 'en';
 }
 
+// Agency account switcher: ?account=<id> (0/empty = all accounts).
+if (isset($_GET['account']) && role_is_agency($_SESSION['user_role'] ?? '')) {
+    $aid = ctype_digit((string) $_GET['account']) ? (int) $_GET['account'] : 0;
+    $_SESSION['acting_account_id'] = $aid > 0 ? $aid : null;
+    $qs = $_GET; unset($qs['account']);
+    header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?') . ($qs ? ('?' . http_build_query($qs)) : ''));
+    exit;
+}
+
 /* -------------------------------------------------------------------------
  * 5. Logout handler (?logout=1)
  * ---------------------------------------------------------------------- */
 if (isset($_GET['logout'])) {
     $_SESSION = [];
+    unset($_SESSION['acting_account_id']);
     if (ini_get('session.use_cookies')) {
         $p = session_get_cookie_params();
         setcookie(session_name(), '', time() - 42000, $p['path'], $p['domain'], $p['secure'], $p['httponly']);
@@ -166,6 +176,44 @@ function role_is_agency(?string $role): bool
     return in_array($role, ['agency_admin', 'agency_user'], true);
 }
 
+/* -------------------------------------------------------------------------
+ * Multi-tenant account scope.
+ * ---------------------------------------------------------------------- */
+function all_accounts(): array
+{
+    global $pdo;
+    try {
+        return $pdo->query('SELECT id, name, logo, brand_name, contact_email, whatsapp FROM accounts ORDER BY name ASC')->fetchAll();
+    } catch (Throwable $e) { return []; }
+}
+
+/* The account the current request operates on.
+ *   account_admin / account_user / supplier -> their own account_id
+ *   agency_admin / agency_user               -> the selected "acting" account,
+ *                                               or null meaning "all accounts".
+ */
+function current_account_id(): ?int
+{
+    $role = $_SESSION['user_role'] ?? '';
+    if (role_is_agency($role)) {
+        $a = $_SESSION['acting_account_id'] ?? null;
+        return ($a !== null && (int) $a > 0) ? (int) $a : null;
+    }
+    $a = $_SESSION['account_id'] ?? null;
+    return ($a !== null && (int) $a > 0) ? (int) $a : null;
+}
+
+function account_name(?int $id): string
+{
+    if (!$id) { return ''; }
+    global $pdo;
+    try {
+        $s = $pdo->prepare('SELECT name FROM accounts WHERE id = ?');
+        $s->execute([$id]);
+        return (string) ($s->fetchColumn() ?: '');
+    } catch (Throwable $e) { return ''; }
+}
+
 function role_can_manage_inventory(?string $role): bool
 {
     // All roles can manage inventory. account_user is the admin of ONE branch
@@ -174,9 +222,11 @@ function role_can_manage_inventory(?string $role): bool
 }
 
 /**
- * Whether a role can see/manage EVERY branch (cawangan).
- *   agency_admin / agency_user / account_admin -> all branches
- *   account_user                               -> only their own branch
+ * Whether a role sees every branch *within the current account scope*.
+ *   agency_admin / agency_user  -> all branches (optionally filtered to the
+ *                                  acting account by current_account_id()).
+ *   account_admin               -> all branches in THEIR account.
+ *   account_user                -> only their own branch.
  */
 function role_sees_all_branches(?string $role): bool
 {

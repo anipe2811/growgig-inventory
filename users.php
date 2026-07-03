@@ -13,7 +13,23 @@ if (!role_can_manage_users($role)) {
     exit;
 }
 
-$branches       = $pdo->query('SELECT id, name, location FROM branches ORDER BY name ASC')->fetchAll();
+$acctId = current_account_id();
+if ($acctId === null && role_is_agency($role)) {
+    $pageTitle = __('nav_users');
+    require __DIR__ . '/includes/header.php';
+    ?>
+    <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
+        <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white"><?= e(__('users_title')) ?></h1>
+        <p class="mt-4 text-sm text-gray-500 dark:text-gray-400"><?= e(__('acct_pick_first')) ?></p>
+    </section>
+    <?php
+    require __DIR__ . '/includes/footer.php';
+    exit;
+}
+
+$branches       = $pdo->prepare('SELECT id, name, location FROM branches WHERE account_id = ? ORDER BY name ASC');
+$branches->execute([$acctId]);
+$branches       = $branches->fetchAll();
 $validBranchIds = array_map(static fn($b) => (int) $b['id'], $branches);
 
 /* -------------------------------------------------------------------------
@@ -21,6 +37,11 @@ $validBranchIds = array_map(static fn($b) => (int) $b['id'], $branches);
  * ---------------------------------------------------------------------- */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!csrf_verify()) { header('Location: users.php?msg=denied'); exit; }
+
+    // Agency must have an acting account selected before mutating account data.
+    if (role_is_agency($role) && $acctId === null) {
+        header('Location: users.php?msg=pick_account'); exit;
+    }
     $action = $_POST['action'] ?? '';
 
     if ($action === 'create_user') {
@@ -34,8 +55,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $chk = $pdo->prepare('SELECT id FROM users WHERE email = ? LIMIT 1');
         $chk->execute([$email]);
         if ($chk->fetch()) { header('Location: users.php?msg=taken'); exit; }
-        $pdo->prepare('INSERT INTO users (name, email, password, whatsapp, role, branch_id) VALUES (?, ?, ?, ?, ?, ?)')
-            ->execute([$name, $email, password_hash($pass, PASSWORD_DEFAULT), '', 'account_user', $branch]);
+        $pdo->prepare('INSERT INTO users (name, email, password, whatsapp, role, branch_id, account_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
+            ->execute([$name, $email, password_hash($pass, PASSWORD_DEFAULT), '', 'account_user', $branch, $acctId]);
         header('Location: users.php?msg=added'); exit;
     }
 
@@ -55,18 +76,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $chk->execute([$email, $id]);
         if ($chk->fetch()) { header('Location: users.php?msg=taken'); exit; }
         if ($pass !== '') {
-            $pdo->prepare("UPDATE users SET name=?, email=?, branch_id=?, password=? WHERE id=? AND role='account_user'")
-                ->execute([$name, $email, $branch, password_hash($pass, PASSWORD_DEFAULT), $id]);
+            $pdo->prepare("UPDATE users SET name=?, email=?, branch_id=?, password=? WHERE id=? AND role='account_user' AND account_id = ?")
+                ->execute([$name, $email, $branch, password_hash($pass, PASSWORD_DEFAULT), $id, $acctId]);
         } else {
-            $pdo->prepare("UPDATE users SET name=?, email=?, branch_id=? WHERE id=? AND role='account_user'")
-                ->execute([$name, $email, $branch, $id]);
+            $pdo->prepare("UPDATE users SET name=?, email=?, branch_id=? WHERE id=? AND role='account_user' AND account_id = ?")
+                ->execute([$name, $email, $branch, $id, $acctId]);
         }
         header('Location: users.php?msg=user_updated'); exit;
     }
 
     if ($action === 'delete_user') {
         $id = (int) ($_POST['id'] ?? 0);
-        $pdo->prepare("DELETE FROM users WHERE id = ? AND role = 'account_user'")->execute([$id]);
+        $pdo->prepare("DELETE FROM users WHERE id = ? AND role = 'account_user' AND account_id = ?")->execute([$id, $acctId]);
         header('Location: users.php?msg=deleted'); exit;
     }
 
@@ -90,16 +111,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $email    = trim($_POST['email'] ?? '');
         $pass     = $_POST['password'] ?? '';
         $supplier = (int) ($_POST['supplier_id'] ?? 0);
-        $chkSup   = $pdo->prepare('SELECT id FROM suppliers WHERE id = ?');
-        $chkSup->execute([$supplier]);
+        $chkSup   = $pdo->prepare('SELECT id FROM suppliers WHERE id = ? AND account_id = ?');
+        $chkSup->execute([$supplier, $acctId]);
         if ($name === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($pass) < 6 || !$chkSup->fetch()) {
             header('Location: users.php?msg=invalid'); exit;
         }
         $chk = $pdo->prepare('SELECT id FROM users WHERE email = ? LIMIT 1');
         $chk->execute([$email]);
         if ($chk->fetch()) { header('Location: users.php?msg=taken'); exit; }
-        $pdo->prepare('INSERT INTO users (name, email, password, whatsapp, role, branch_id, supplier_id) VALUES (?, ?, ?, ?, "supplier", NULL, ?)')
-            ->execute([$name, $email, password_hash($pass, PASSWORD_DEFAULT), '', $supplier]);
+        $pdo->prepare('INSERT INTO users (name, email, password, whatsapp, role, branch_id, supplier_id, account_id) VALUES (?, ?, ?, ?, "supplier", NULL, ?, ?)')
+            ->execute([$name, $email, password_hash($pass, PASSWORD_DEFAULT), '', $supplier, $acctId]);
         header('Location: users.php?msg=sup_added'); exit;
     }
 
@@ -109,8 +130,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $email    = trim($_POST['email'] ?? '');
         $pass     = $_POST['password'] ?? '';
         $supplier = (int) ($_POST['supplier_id'] ?? 0);
-        $chkSup   = $pdo->prepare('SELECT id FROM suppliers WHERE id = ?');
-        $chkSup->execute([$supplier]);
+        $chkSup   = $pdo->prepare('SELECT id FROM suppliers WHERE id = ? AND account_id = ?');
+        $chkSup->execute([$supplier, $acctId]);
         if ($name === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || !$chkSup->fetch() || ($pass !== '' && strlen($pass) < 6)) {
             header('Location: users.php?msg=invalid'); exit;
         }
@@ -121,18 +142,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $chk->execute([$email, $id]);
         if ($chk->fetch()) { header('Location: users.php?msg=taken'); exit; }
         if ($pass !== '') {
-            $pdo->prepare("UPDATE users SET name=?, email=?, supplier_id=?, password=? WHERE id=? AND role='supplier'")
-                ->execute([$name, $email, $supplier, password_hash($pass, PASSWORD_DEFAULT), $id]);
+            $pdo->prepare("UPDATE users SET name=?, email=?, supplier_id=?, password=? WHERE id=? AND role='supplier' AND account_id = ?")
+                ->execute([$name, $email, $supplier, password_hash($pass, PASSWORD_DEFAULT), $id, $acctId]);
         } else {
-            $pdo->prepare("UPDATE users SET name=?, email=?, supplier_id=? WHERE id=? AND role='supplier'")
-                ->execute([$name, $email, $supplier, $id]);
+            $pdo->prepare("UPDATE users SET name=?, email=?, supplier_id=? WHERE id=? AND role='supplier' AND account_id = ?")
+                ->execute([$name, $email, $supplier, $id, $acctId]);
         }
         header('Location: users.php?msg=sup_user_updated'); exit;
     }
 
     if ($action === 'delete_supplier_user') {
         $id = (int) ($_POST['id'] ?? 0);
-        $pdo->prepare("DELETE FROM users WHERE id = ? AND role = 'supplier'")->execute([$id]);
+        $pdo->prepare("DELETE FROM users WHERE id = ? AND role = 'supplier' AND account_id = ?")->execute([$id, $acctId]);
         header('Location: users.php?msg=sup_deleted'); exit;
     }
 
@@ -141,7 +162,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $name = trim($_POST['name'] ?? '');
         $loc  = trim($_POST['location'] ?? '');
         if ($name !== '') {
-            $pdo->prepare('INSERT INTO branches (name, location) VALUES (?, ?)')->execute([$name, $loc !== '' ? $loc : null]);
+            $pdo->prepare('INSERT INTO branches (name, location, account_id) VALUES (?, ?, ?)')->execute([$name, $loc !== '' ? $loc : null, $acctId]);
         }
         header('Location: users.php?msg=branch_added'); exit;
     }
@@ -152,7 +173,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ((int) $uc->fetchColumn() > 0 || (int) $ic->fetchColumn() > 0) {
             header('Location: users.php?msg=branch_in_use'); exit;
         }
-        $pdo->prepare('DELETE FROM branches WHERE id = ?')->execute([$id]);
+        $pdo->prepare('DELETE FROM branches WHERE id = ? AND account_id = ?')->execute([$id, $acctId]);
         header('Location: users.php?msg=branch_removed'); exit;
     }
 
@@ -160,13 +181,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'add_supplier') {
         $name = trim($_POST['name'] ?? '');
         if ($name !== '') {
-            $pdo->prepare('INSERT INTO suppliers (name, email, phone) VALUES (?, ?, ?)')
-                ->execute([$name, trim($_POST['email'] ?? ''), trim($_POST['phone'] ?? '')]);
+            $pdo->prepare('INSERT INTO suppliers (name, email, phone, account_id) VALUES (?, ?, ?, ?)')
+                ->execute([$name, trim($_POST['email'] ?? ''), trim($_POST['phone'] ?? ''), $acctId]);
         }
         header('Location: users.php?msg=supplier_added'); exit;
     }
     if ($action === 'delete_supplier') {
-        $pdo->prepare('DELETE FROM suppliers WHERE id = ?')->execute([(int) ($_POST['id'] ?? 0)]);
+        $pdo->prepare('DELETE FROM suppliers WHERE id = ? AND account_id = ?')->execute([(int) ($_POST['id'] ?? 0), $acctId]);
         header('Location: users.php?msg=supplier_removed'); exit;
     }
 
@@ -176,11 +197,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 /* -------------------------------------------------------------------------
  * Data.
  * ---------------------------------------------------------------------- */
-$accountUsers = $pdo->query(
+$accountUsersStmt = $pdo->prepare(
     "SELECT u.id, u.name, u.email, u.created_at, b.name AS branch
      FROM users u LEFT JOIN branches b ON b.id = u.branch_id
-     WHERE u.role = 'account_user' ORDER BY u.id DESC"
-)->fetchAll();
+     WHERE u.role = 'account_user' AND u.account_id = ? ORDER BY u.id DESC"
+);
+$accountUsersStmt->execute([$acctId]);
+$accountUsers = $accountUsersStmt->fetchAll();
 $seats   = count($accountUsers);
 $sub     = subscription_state();
 $monthly = $seats * $sub['price'];
@@ -191,23 +214,27 @@ $statusMap = [
 ];
 [$stKey, $stClass] = $statusMap[$sub['status']] ?? $statusMap['trial'];
 
-$suppliers     = $pdo->query('SELECT id, name, email, phone FROM suppliers ORDER BY name ASC')->fetchAll();
-$supplierUsers = $pdo->query(
+$suppliersStmt = $pdo->prepare('SELECT id, name, email, phone FROM suppliers WHERE account_id = ? ORDER BY name ASC');
+$suppliersStmt->execute([$acctId]);
+$suppliers     = $suppliersStmt->fetchAll();
+$supplierUsersStmt = $pdo->prepare(
     "SELECT u.id, u.name, u.email, u.created_at, s.name AS supplier
      FROM users u LEFT JOIN suppliers s ON s.id = u.supplier_id
-     WHERE u.role = 'supplier' ORDER BY u.id DESC"
-)->fetchAll();
+     WHERE u.role = 'supplier' AND u.account_id = ? ORDER BY u.id DESC"
+);
+$supplierUsersStmt->execute([$acctId]);
+$supplierUsers = $supplierUsersStmt->fetchAll();
 
 $editUser = null;
 if (isset($_GET['edit_user'])) {
-    $eu = $pdo->prepare("SELECT id, name, email, branch_id FROM users WHERE id = ? AND role = 'account_user'");
-    $eu->execute([(int) $_GET['edit_user']]);
+    $eu = $pdo->prepare("SELECT id, name, email, branch_id FROM users WHERE id = ? AND role = 'account_user' AND account_id = ?");
+    $eu->execute([(int) $_GET['edit_user'], $acctId]);
     $editUser = $eu->fetch() ?: null;
 }
 $editSupplierUser = null;
 if (isset($_GET['edit_supplier_user'])) {
-    $es = $pdo->prepare("SELECT id, name, email, supplier_id FROM users WHERE id = ? AND role = 'supplier'");
-    $es->execute([(int) $_GET['edit_supplier_user']]);
+    $es = $pdo->prepare("SELECT id, name, email, supplier_id FROM users WHERE id = ? AND role = 'supplier' AND account_id = ?");
+    $es->execute([(int) $_GET['edit_supplier_user'], $acctId]);
     $editSupplierUser = $es->fetch() ?: null;
 }
 
@@ -227,6 +254,7 @@ $flashMap = [
     'taken'            => ['err_email_taken',      'red'],
     'invalid'          => ['err_fill_all',         'red'],
     'denied'           => ['inv_not_allowed',      'red'],
+    'pick_account'     => ['acct_pick_first',      'red'],
 ];
 $flash = $flashMap[$_GET['msg'] ?? ''] ?? null;
 

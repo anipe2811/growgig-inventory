@@ -24,21 +24,40 @@ if (!role_can_use_orders($role)) {
 $canManage    = role_can_order($role);          // place/approve/reject/verify any branch + suppliers
 $isBranchUser = role_can_request_order($role);  // request + verify own branch only
 $userBranch   = isset($_SESSION['branch_id']) && $_SESSION['branch_id'] !== null ? (int) $_SESSION['branch_id'] : 0;
+$acct         = current_account_id(); // non-null = restrict to this account; null = agency "all accounts" (global)
+
+// Extra guard fragment restricting manager order mutations to the acting account's
+// branches (empty = agency "all accounts"). $acct is an int, so inlining is injection-safe.
+$acctOrderClause = $acct ? ' AND branch_id IN (SELECT id FROM branches WHERE account_id = ' . (int) $acct . ')' : '';
+// Same idea for the suppliers table: append to a WHERE ... id = ? clause. $acct is an int, so inlining is injection-safe.
+$acctSupClause = $acct ? ' AND account_id = ' . (int) $acct : '';
 
 /* Branch scope: managers see all branches; a branch user is locked to their own. */
 if ($canManage) {
-    $branches = $pdo->query('SELECT id, name FROM branches ORDER BY name ASC')->fetchAll();
+    if ($acct) {
+        $bq = $pdo->prepare('SELECT id, name FROM branches WHERE account_id = ? ORDER BY name ASC');
+        $bq->execute([$acct]);
+        $branches = $bq->fetchAll();
+    } else {
+        $branches = $pdo->query('SELECT id, name FROM branches ORDER BY name ASC')->fetchAll();
+    }
 } else {
     $bs = $pdo->prepare('SELECT id, name FROM branches WHERE id = ?');
     $bs->execute([$userBranch]);
     $branches = $bs->fetchAll();
 }
 $validBranchIds = array_map(static fn($b) => (int) $b['id'], $branches);
-$suppliers      = $pdo->query('SELECT id, name, email, phone FROM suppliers ORDER BY name ASC')->fetchAll();
+if ($acct) {
+    $sst = $pdo->prepare('SELECT id, name, email, phone FROM suppliers WHERE account_id = ? ORDER BY name ASC');
+    $sst->execute([$acct]);
+    $suppliers = $sst->fetchAll();
+} else {
+    $suppliers = $pdo->query('SELECT id, name, email, phone FROM suppliers ORDER BY name ASC')->fetchAll();
+}
 
 $editSupplier = null;
 if ($canManage && isset($_GET['edit_supplier'])) {
-    $es = $pdo->prepare('SELECT id, name, email, phone FROM suppliers WHERE id = ?');
+    $es = $pdo->prepare('SELECT id, name, email, phone FROM suppliers WHERE id = ?' . $acctSupClause);
     $es->execute([(int) $_GET['edit_supplier']]);
     $editSupplier = $es->fetch() ?: null;
 }
@@ -76,10 +95,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     /* Manager: add supplier. */
     if ($action === 'add_supplier' && $canManage) {
+        if ($acct === null) { header('Location: orders.php?msg=pick_account'); exit; }
         $name = trim($_POST['name'] ?? '');
         if ($name !== '') {
-            $pdo->prepare('INSERT INTO suppliers (name, email, phone) VALUES (?, ?, ?)')
-                ->execute([$name, trim($_POST['email'] ?? ''), trim($_POST['phone'] ?? '')]);
+            $pdo->prepare('INSERT INTO suppliers (name, email, phone, account_id) VALUES (?, ?, ?, ?)')
+                ->execute([$name, trim($_POST['email'] ?? ''), trim($_POST['phone'] ?? ''), $acct]);
         }
         header('Location: ' . $redirectBase . '&msg=sup_added'); exit;
     }
@@ -89,13 +109,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $id   = (int) ($_POST['id'] ?? 0);
         $name = trim($_POST['name'] ?? '');
         if ($id > 0 && $name !== '') {
-            $pdo->prepare('UPDATE suppliers SET name=?, email=?, phone=? WHERE id=?')
+            $pdo->prepare('UPDATE suppliers SET name=?, email=?, phone=? WHERE id=?' . $acctSupClause)
                 ->execute([$name, trim($_POST['email'] ?? ''), trim($_POST['phone'] ?? ''), $id]);
         }
         header('Location: ' . $redirectBase . '&msg=sup_updated'); exit;
     }
     if ($action === 'delete_supplier' && $canManage) {
-        $pdo->prepare('DELETE FROM suppliers WHERE id = ?')->execute([(int) ($_POST['id'] ?? 0)]);
+        $pdo->prepare('DELETE FROM suppliers WHERE id = ?' . $acctSupClause)->execute([(int) ($_POST['id'] ?? 0)]);
         header('Location: ' . $redirectBase . '&msg=sup_removed'); exit;
     }
 
@@ -110,6 +130,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $supplierId = (int) ($_POST['supplier_id'] ?? 0);
         if (!in_array($branchId, $validBranchIds, true) || $supplierId <= 0) {
             header('Location: ' . $redirectBase . '&msg=invalid'); exit;
+        }
+        if ($acct) {
+            $chk = $pdo->prepare('SELECT id FROM suppliers WHERE id = ? AND account_id = ?');
+            $chk->execute([$supplierId, $acct]);
+            if (!$chk->fetch()) { header('Location: ' . $redirectBase . '&msg=denied'); exit; }
         }
         $lines = $buildLines($branchId, $_POST['qty'] ?? null);
         if (!$lines) { header('Location: ' . $redirectBase . '&msg=empty'); exit; }
@@ -145,7 +170,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     /* Manager: approve a request -> pending (the order is now "placed"). */
     if ($action === 'approve_order' && $canManage) {
         $oid = (int) ($_POST['id'] ?? 0);
-        $upd = $pdo->prepare('UPDATE purchase_orders SET status = "pending", approved_by = ?, approved_at = NOW() WHERE id = ? AND status = "requested"');
+        $upd = $pdo->prepare('UPDATE purchase_orders SET status = "pending", approved_by = ?, approved_at = NOW() WHERE id = ? AND status = "requested"' . $acctOrderClause);
         $upd->execute([$_SESSION['user_id'], $oid]);
         if ($upd->rowCount() === 1) {
             $info = $pdo->prepare('SELECT po.created_by, po.supplier_id, b.name AS branch FROM purchase_orders po LEFT JOIN branches b ON b.id = po.branch_id WHERE po.id = ?');
@@ -163,7 +188,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     /* Manager: reject a request -> rejected (terminal). */
     if ($action === 'reject_order' && $canManage) {
         $oid = (int) ($_POST['id'] ?? 0);
-        $upd = $pdo->prepare('UPDATE purchase_orders SET status = "rejected", approved_by = ?, approved_at = NOW() WHERE id = ? AND status = "requested"');
+        $upd = $pdo->prepare('UPDATE purchase_orders SET status = "rejected", approved_by = ?, approved_at = NOW() WHERE id = ? AND status = "requested"' . $acctOrderClause);
         $upd->execute([$_SESSION['user_id'], $oid]);
         if ($upd->rowCount() === 1) {
             $cb = $pdo->prepare('SELECT created_by FROM purchase_orders WHERE id = ?');
@@ -180,7 +205,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
      * is what actually adds the stock to the branch. Flow: supplier -> HQ -> branch. */
     if ($action === 'forward_order' && $canManage) {
         $oid = (int) ($_POST['id'] ?? 0);
-        $upd = $pdo->prepare('UPDATE purchase_orders SET status = "forwarded", forwarded_by = ?, forwarded_at = NOW() WHERE id = ? AND status IN ("pending","delivered")');
+        $upd = $pdo->prepare('UPDATE purchase_orders SET status = "forwarded", forwarded_by = ?, forwarded_at = NOW() WHERE id = ? AND status IN ("pending","delivered")' . $acctOrderClause);
         $upd->execute([$_SESSION['user_id'], $oid]);
         if ($upd->rowCount() === 1) {
             $info = $pdo->prepare('SELECT branch_id FROM purchase_orders WHERE id = ?');
@@ -244,7 +269,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'cancel_order') {
         $oid = (int) ($_POST['id'] ?? 0);
         if ($canManage) {
-            $pdo->prepare('UPDATE purchase_orders SET status = "cancelled" WHERE id = ? AND status IN ("requested","pending")')->execute([$oid]);
+            $pdo->prepare('UPDATE purchase_orders SET status = "cancelled" WHERE id = ? AND status IN ("requested","pending")' . $acctOrderClause)->execute([$oid]);
         } elseif ($isBranchUser) {
             $pdo->prepare('UPDATE purchase_orders SET status = "cancelled" WHERE id = ? AND status = "requested" AND branch_id = ?')->execute([$oid, $userBranch]);
         }
@@ -259,7 +284,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->beginTransaction();
         try {
             if ($canManage) {
-                $sel = $pdo->prepare("SELECT id FROM purchase_orders WHERE id = ? AND status IN ($deletable) FOR UPDATE");
+                $sel = $pdo->prepare("SELECT id FROM purchase_orders WHERE id = ? AND status IN ($deletable)" . $acctOrderClause . ' FOR UPDATE');
                 $sel->execute([$oid]);
             } elseif ($isBranchUser) {
                 $sel = $pdo->prepare("SELECT id FROM purchase_orders WHERE id = ? AND branch_id = ? AND status IN ($deletable) FOR UPDATE");
@@ -284,7 +309,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $oid    = (int) ($_POST['id'] ?? 0);
         $reason = trim((string) ($_POST['reason'] ?? ''));
         if (mb_strlen($reason) > 300) { $reason = mb_substr($reason, 0, 300); }
-        $o = $pdo->prepare('SELECT po.branch_id, po.supplier_id, b.name AS branch FROM purchase_orders po LEFT JOIN branches b ON b.id = po.branch_id WHERE po.id = ? AND po.status IN ("pending","delivered","forwarded","received")');
+        $issueAcctClause = $acct ? ' AND po.branch_id IN (SELECT id FROM branches WHERE account_id = ' . (int) $acct . ')' : '';
+        $o = $pdo->prepare('SELECT po.branch_id, po.supplier_id, b.name AS branch FROM purchase_orders po LEFT JOIN branches b ON b.id = po.branch_id WHERE po.id = ? AND po.status IN ("pending","delivered","forwarded","received")' . $issueAcctClause);
         $o->execute([$oid]);
         $order   = $o->fetch();
         $allowed = $order && ($canManage || ($isBranchUser && (int) $order['branch_id'] === $userBranch));
@@ -306,7 +332,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $adj = is_array($_POST['adjust'] ?? null) ? $_POST['adjust'] : [];
         $pdo->beginTransaction();
         try {
-            $sel = $pdo->prepare('SELECT branch_id FROM purchase_orders WHERE id = ? AND status = "received" FOR UPDATE');
+            $sel = $pdo->prepare('SELECT branch_id FROM purchase_orders WHERE id = ? AND status = "received"' . $acctOrderClause . ' FOR UPDATE');
             $sel->execute([$oid]);
             $order   = $sel->fetch();
             $allowed = $order && ($canManage || ($isBranchUser && (int) $order['branch_id'] === $userBranch));
@@ -349,9 +375,18 @@ if ($selectedBranch) {
     $items = $st->fetchAll();
 }
 
-/* Orders list — branch users see only their own branch. */
-$ordWhere  = $isBranchUser ? 'WHERE po.branch_id = ?' : '';
-$ordParams = $isBranchUser ? [$userBranch] : [];
+/* Orders list — branch users see only their own branch; managers see all branches
+ * within the acting account (or every account when agency "all accounts"). */
+if ($isBranchUser) {
+    $ordWhere  = 'WHERE po.branch_id = ?';
+    $ordParams = [$userBranch];
+} elseif ($acct) {
+    $ordWhere  = 'WHERE po.branch_id IN (SELECT id FROM branches WHERE account_id = ' . (int) $acct . ')';
+    $ordParams = [];
+} else {
+    $ordWhere  = '';
+    $ordParams = [];
+}
 $ostmt = $pdo->prepare(
     'SELECT po.id, po.status, po.created_at, po.received_at, po.branch_id,
             COALESCE(s.name, po.supplier_name) AS supplier, b.name AS branch, u.name AS requester,
@@ -394,6 +429,7 @@ $flashMap = [
     'invalid'     => ['err_fill_all',   'red'],
     'denied'      => ['inv_not_allowed','red'],
     'frozen'      => ['stock_frozen',   'red'],
+    'pick_account'=> ['acct_pick_first','red'],
 ];
 $flash = $flashMap[$_GET['msg'] ?? ''] ?? null;
 
