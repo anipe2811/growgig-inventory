@@ -217,5 +217,50 @@ require __DIR__ . '/includes/header.php';
             </table>
         </div>
     </div>
+
+    <?php if (role_is_super($role)):
+        try {
+            $impLogRows = $pdo->query('SELECT * FROM impersonation_log ORDER BY id DESC LIMIT 50')->fetchAll();
+        } catch (Throwable $e) { $impLogRows = []; }
+    ?>
+    <div class="mt-6 bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <div class="px-5 sm:px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <h3 class="font-semibold text-gray-900 dark:text-white"><?= e(__('imp_log_title')) ?></h3>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm">
+                <thead class="bg-gray-50 dark:bg-gray-900/50">
+                    <tr class="text-left text-gray-500 dark:text-gray-400">
+                        <th class="px-4 py-3 font-semibold"><?= e(__('col_when')) ?></th>
+                        <th class="px-4 py-3 font-semibold"><?= e(__('col_actions')) ?></th>
+                        <th class="px-4 py-3 font-semibold"><?= e(__('col_by')) ?></th>
+                        <th class="px-4 py-3 font-semibold"><?= e(__('col_target')) ?></th>
+                        <th class="px-4 py-3 font-semibold"><?= e(__('acct_name')) ?></th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                    <?php if (!$impLogRows): ?>
+                        <tr><td colspan="5" class="px-4 py-10 text-center text-gray-500 dark:text-gray-400"><?= e(__('imp_log_none')) ?></td></tr>
+                    <?php else: foreach ($impLogRows as $row): ?>
+                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors">
+                            <td class="px-4 py-3 text-gray-600 dark:text-gray-300"><?= e(date('d/m/Y H:i', strtotime((string) $row['created_at']))) ?></td>
+                            <td class="px-4 py-3">
+                                <?php if ($row['action'] === 'start'): ?>
+                                    <span class="px-2 py-0.5 rounded text-xs font-medium bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"><?= e(__('imp_ev_start')) ?></span>
+                                <?php else: ?>
+                                    <span class="px-2 py-0.5 rounded text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200"><?= e(__('imp_ev_stop')) ?></span>
+                                <?php endif; ?>
+                            </td>
+                            <td class="px-4 py-3 text-gray-700 dark:text-gray-300"><?= e($row['impersonator_name'] ?? '') ?></td>
+                            <td class="px-4 py-3 text-gray-700 dark:text-gray-300"><?= e($row['target_name'] ?? '') ?></td>
+                            <?php $acctLabel = $row['account_id'] ? (account_name((int) $row['account_id']) ?: '-') : '-'; ?>
+                            <td class="px-4 py-3 text-gray-600 dark:text-gray-300"><?= e($acctLabel) ?></td>
+                        </tr>
+                    <?php endforeach; endif; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <?php endif; ?>
 </section>
 <?php require __DIR__ . '/includes/footer.php'; ?>

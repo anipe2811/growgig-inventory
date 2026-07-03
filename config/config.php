@@ -119,6 +119,7 @@ if (isset($_GET['logout'])) {
  * ---------------------------------------------------------------------- */
 if (isset($_GET['stop_impersonate']) && !empty($_SESSION['impersonator_id'])) {
     global $pdo;
+    log_impersonation('stop', (int) $_SESSION['impersonator_id'], (string) ($_SESSION['impersonator_name'] ?? ''), (int) ($_SESSION['user_id'] ?? 0), (string) ($_SESSION['user_name'] ?? ''), isset($_SESSION['account_id']) ? (int) $_SESSION['account_id'] : null);
     $impId = (int) $_SESSION['impersonator_id'];
     try {
         $st = $pdo->prepare('SELECT id, name, role, branch_id, account_id FROM users WHERE id = ?');
@@ -449,6 +450,16 @@ function notify_supplier_users(int $supplierId, string $title, string $body = ''
         $stmt->execute([$supplierId]);
         foreach ($stmt->fetchAll() as $r) { notify_user((int) $r['id'], 'order', $title, $body, $link); }
     } catch (Throwable $e) { /* best-effort */ }
+}
+
+/* Record an impersonation event (best-effort; never fatal). action: start|stop */
+function log_impersonation(string $action, int $impersonatorId, string $impersonatorName, int $targetId, string $targetName, ?int $accountId): void
+{
+    global $pdo;
+    try {
+        $pdo->prepare('INSERT INTO impersonation_log (impersonator_id, impersonator_name, target_id, target_name, account_id, action) VALUES (?, ?, ?, ?, ?, ?)')
+            ->execute([$impersonatorId, $impersonatorName, $targetId, $targetName, $accountId, $action]);
+    } catch (Throwable $e) { /* audit is best-effort */ }
 }
 
 /* Notification types the agency team sees. Agency is the SaaS operator, so it
