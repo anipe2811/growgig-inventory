@@ -242,13 +242,13 @@ function role_sees_all_branches(?string $role): bool
  * ---------------------------------------------------------------------- */
 function current_brand(): array
 {
-    $growgig = ['key'=>'growgig','name'=>'GrowGig','nav_name'=>'GrowGig','logo'=>'assets/logo-growgig.png','accent'=>'text-blue-600 dark:text-blue-400'];
+    $growgig = ['key'=>'growgig','name'=>'GrowGig','nav_name'=>'GrowGig','logo'=>'assets/logo-growgig.png','accent'=>'text-blue-600 dark:text-blue-400','email'=>'hello@growgig.tech'];
     if (!is_logged_in()) { return $growgig; }
     $acctId = current_account_id();
     if (!$acctId) { return $growgig; } // agency "all accounts" (or no context)
     global $pdo;
     try {
-        $st = $pdo->prepare('SELECT name, brand_name, logo FROM accounts WHERE id = ?');
+        $st = $pdo->prepare('SELECT name, brand_name, logo, contact_email FROM accounts WHERE id = ?');
         $st->execute([$acctId]);
         $a = $st->fetch();
     } catch (Throwable $e) { $a = null; }
@@ -260,6 +260,7 @@ function current_brand(): array
         'nav_name' => $name,
         'logo'     => $a['logo'] ?: 'assets/logo-aktifotak.png',
         'accent'   => 'text-indigo-600 dark:text-indigo-400',
+        'email'    => ($a['contact_email'] ?: 'hello@growgig.tech'),
     ];
 }
 
