@@ -8,6 +8,7 @@
  */
 require_once __DIR__ . '/config/config.php';
 require_login();
+if (agency_needs_account()) { require __DIR__ . '/includes/account_gate.php'; exit; }
 
 $role       = $_SESSION['user_role'] ?? 'account_user';
 // Stock In/Out is keyed in by the branch operator only (account_user).
