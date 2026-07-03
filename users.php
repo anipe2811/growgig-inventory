@@ -91,17 +91,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: users.php?msg=deleted'); exit;
     }
 
-    // Subscription controls
+    // Subscription controls — scoped to the current account only.
     if ($action === 'sub_activate' && in_array($role, ['agency_admin', 'account_admin'], true)) {
-        $pdo->query("UPDATE subscriptions SET status='active'");
+        $pdo->prepare("UPDATE subscriptions SET status='active' WHERE account_id = ?")->execute([$acctId]);
         header('Location: users.php?msg=sub'); exit;
     }
     if ($action === 'sub_trial' && $role === 'agency_admin') {
-        $pdo->query("UPDATE subscriptions SET status='trial', trial_ends_at = DATE_ADD(CURDATE(), INTERVAL 14 DAY)");
+        $pdo->prepare("UPDATE subscriptions SET status='trial', trial_ends_at = DATE_ADD(CURDATE(), INTERVAL 14 DAY) WHERE account_id = ?")->execute([$acctId]);
         header('Location: users.php?msg=sub'); exit;
     }
     if ($action === 'sub_freeze' && $role === 'agency_admin') {
-        $pdo->query("UPDATE subscriptions SET status='frozen'");
+        $pdo->prepare("UPDATE subscriptions SET status='frozen' WHERE account_id = ?")->execute([$acctId]);
         header('Location: users.php?msg=sub'); exit;
     }
 

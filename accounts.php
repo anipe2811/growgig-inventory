@@ -18,9 +18,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $wa      = trim($_POST['whatsapp'] ?? '');
         $brand   = trim($_POST['brand_name'] ?? '');
         if ($name === '') { header('Location: accounts.php?msg=invalid'); exit; }
+
+        /* Optional per-account logo upload — validated as a real image, saved with a safe name. */
+        $logoPath = null;
+        if (!empty($_FILES['logo']['name'])) {
+            $f = $_FILES['logo'];
+            $allowed = ['image/jpeg'=>'jpg','image/png'=>'png','image/webp'=>'webp'];
+            $info = ($f['error'] === UPLOAD_ERR_OK) ? @getimagesize($f['tmp_name']) : false;
+            if ($info && isset($allowed[$info['mime']])) {
+                $dir = __DIR__ . '/assets/account-logos';
+                if (!is_dir($dir)) { @mkdir($dir, 0775, true); }
+                $fname = 'acct_' . bin2hex(random_bytes(6)) . '.' . $allowed[$info['mime']];
+                if (move_uploaded_file($f['tmp_name'], $dir . '/' . $fname)) { $logoPath = 'assets/account-logos/' . $fname; }
+            }
+        }
+
         if ($action === 'create_account') {
-            $pdo->prepare('INSERT INTO accounts (name, brand_name, contact_email, whatsapp) VALUES (?, ?, ?, ?)')
-                ->execute([$name, $brand ?: $name, $email ?: null, $wa ?: null]);
+            $pdo->prepare('INSERT INTO accounts (name, brand_name, contact_email, whatsapp, logo) VALUES (?, ?, ?, ?, ?)')
+                ->execute([$name, $brand ?: $name, $email ?: null, $wa ?: null, $logoPath]);
             $aid = (int) $pdo->lastInsertId();
             try {
                 $pdo->prepare("INSERT INTO subscriptions (account_id, plan, status, trial_ends_at) VALUES (?, 'trial', 'trial', DATE_ADD(CURDATE(), INTERVAL 14 DAY))")
@@ -29,8 +44,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: accounts.php?msg=added'); exit;
         }
         $id = (int) ($_POST['id'] ?? 0);
-        $pdo->prepare('UPDATE accounts SET name=?, brand_name=?, contact_email=?, whatsapp=? WHERE id=?')
-            ->execute([$name, $brand ?: $name, $email ?: null, $wa ?: null, $id]);
+        $pdo->prepare('UPDATE accounts SET name=?, brand_name=?, contact_email=?, whatsapp=?, logo = COALESCE(?, logo) WHERE id=?')
+            ->execute([$name, $brand ?: $name, $email ?: null, $wa ?: null, $logoPath, $id]);
         header('Location: accounts.php?msg=updated'); exit;
     }
 
@@ -44,6 +59,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->prepare('DELETE FROM accounts WHERE id = ?')->execute([$id]);
         $pdo->prepare('DELETE FROM subscriptions WHERE account_id = ?')->execute([$id]);
         header('Location: accounts.php?msg=deleted'); exit;
+    }
+
+    if ($action === 'set_sub' && role_is_super($role)) {
+        $id    = (int) ($_POST['id'] ?? 0);
+        $state = in_array($_POST['state'] ?? '', ['active', 'trial', 'frozen'], true) ? $_POST['state'] : '';
+        if ($id > 0 && $state !== '') {
+            if ($state === 'trial') {
+                $pdo->prepare("UPDATE subscriptions SET status='trial', trial_ends_at = DATE_ADD(CURDATE(), INTERVAL 14 DAY) WHERE account_id = ?")->execute([$id]);
+            } else {
+                $pdo->prepare('UPDATE subscriptions SET status=? WHERE account_id = ?')->execute([$state, $id]);
+            }
+        }
+        header('Location: accounts.php?msg=sub'); exit;
     }
     header('Location: accounts.php'); exit;
 }
@@ -59,7 +87,8 @@ $rows = $pdo->query(
     "SELECT a.id, a.name, a.contact_email,
             (SELECT COUNT(*) FROM branches b WHERE b.account_id = a.id) AS branches,
             (SELECT COUNT(*) FROM users u WHERE u.account_id = a.id AND u.role = 'account_user') AS seats,
-            (SELECT s.status FROM subscriptions s WHERE s.account_id = a.id LIMIT 1) AS sub_status
+            (SELECT s.status FROM subscriptions s WHERE s.account_id = a.id LIMIT 1) AS sub_status,
+            (SELECT s.price_per_user FROM subscriptions s WHERE s.account_id = a.id LIMIT 1) AS price_per_user
      FROM accounts a ORDER BY a.name ASC"
 )->fetchAll();
 
@@ -70,6 +99,7 @@ $flashMap = [
     'in_use'  => ['acct_in_use',  'red'],
     'invalid' => ['err_fill_all', 'red'],
     'denied'  => ['inv_not_allowed', 'red'],
+    'sub'     => ['sub_updated',  'green'],
 ];
 $flash = $flashMap[$_GET['msg'] ?? ''] ?? null;
 
@@ -88,7 +118,7 @@ require __DIR__ . '/includes/header.php';
 
     <div id="acct-form" class="mt-6 bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-5 sm:p-6">
         <h3 class="font-semibold text-gray-900 dark:text-white mb-4"><?= e($editAccount ? __('acct_edit') : __('acct_add')) ?></h3>
-        <form method="post" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <form method="post" enctype="multipart/form-data" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="<?= $editAccount ? 'update_account' : 'create_account' ?>">
             <?php if ($editAccount): ?><input type="hidden" name="id" value="<?= (int) $editAccount['id'] ?>"><?php endif; ?>
@@ -99,6 +129,14 @@ require __DIR__ . '/includes/header.php';
             <div>
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"><?= e(__('acct_brand')) ?></label>
                 <input type="text" name="brand_name" value="<?= e($editAccount['brand_name'] ?? '') ?>" class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white px-3 py-2 focus:ring-2 focus:ring-indigo-500 outline-none transition">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"><?= e(__('acct_logo')) ?></label>
+                <?php if (!empty($editAccount['logo'])): ?>
+                    <img src="<?= e($editAccount['logo']) ?>" alt="" class="w-12 h-12 rounded-lg object-contain p-1 ring-1 ring-gray-200 dark:ring-gray-600 bg-white mb-2">
+                <?php endif; ?>
+                <input type="file" name="logo" accept="image/png,image/jpeg,image/webp"
+                       class="w-full text-sm text-gray-600 dark:text-gray-300 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:text-indigo-700 dark:file:bg-indigo-900/40 dark:file:text-indigo-300">
             </div>
             <div>
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"><?= e(__('acct_email')) ?></label>
@@ -124,18 +162,37 @@ require __DIR__ . '/includes/header.php';
                         <th class="px-4 py-3 font-semibold text-right"><?= e(__('card_branches')) ?></th>
                         <th class="px-4 py-3 font-semibold text-right"><?= e(__('bill_seats')) ?></th>
                         <th class="px-4 py-3 font-semibold"><?= e(__('bill_status')) ?></th>
+                        <th class="px-4 py-3 font-semibold text-right"><?= e(__('bill_monthly')) ?></th>
+                        <?php if (role_is_super($role)): ?><th class="px-4 py-3 font-semibold"><?= e(__('col_billing')) ?></th><?php endif; ?>
                         <th class="px-4 py-3 font-semibold text-right"><?= e(__('col_actions')) ?></th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
                     <?php if (!$rows): ?>
-                        <tr><td colspan="5" class="px-4 py-10 text-center text-gray-500 dark:text-gray-400"><?= e(__('acct_none')) ?></td></tr>
+                        <tr><td colspan="<?= role_is_super($role) ? 7 : 6 ?>" class="px-4 py-10 text-center text-gray-500 dark:text-gray-400"><?= e(__('acct_none')) ?></td></tr>
                     <?php else: foreach ($rows as $r): ?>
+                        <?php $monthly = (int) $r['seats'] * (float) ($r['price_per_user'] ?? 29.90); ?>
                         <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors">
                             <td class="px-4 py-3 font-medium text-gray-900 dark:text-white"><?= e($r['name']) ?></td>
                             <td class="px-4 py-3 text-right text-gray-700 dark:text-gray-300"><?= (int) $r['branches'] ?></td>
                             <td class="px-4 py-3 text-right text-gray-700 dark:text-gray-300"><?= (int) $r['seats'] ?></td>
                             <td class="px-4 py-3 text-gray-600 dark:text-gray-300"><?= e($r['sub_status'] ?: '-') ?></td>
+                            <td class="px-4 py-3 text-right text-gray-700 dark:text-gray-300">RM <?= e(number_format($monthly, 2)) ?></td>
+                            <?php if (role_is_super($role)): ?>
+                            <td class="px-4 py-3">
+                                <div class="flex flex-wrap items-center gap-1">
+                                    <form method="post"><?= csrf_field() ?><input type="hidden" name="action" value="set_sub"><input type="hidden" name="id" value="<?= (int) $r['id'] ?>"><input type="hidden" name="state" value="active">
+                                        <button type="submit" class="px-2 py-1 rounded text-xs font-medium bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors"><?= e(__('btn_activate')) ?></button>
+                                    </form>
+                                    <form method="post"><?= csrf_field() ?><input type="hidden" name="action" value="set_sub"><input type="hidden" name="id" value="<?= (int) $r['id'] ?>"><input type="hidden" name="state" value="trial">
+                                        <button type="submit" class="px-2 py-1 rounded text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"><?= e(__('btn_reset_trial')) ?></button>
+                                    </form>
+                                    <form method="post" onsubmit="return confirm('Freeze stock in/out now?');"><?= csrf_field() ?><input type="hidden" name="action" value="set_sub"><input type="hidden" name="id" value="<?= (int) $r['id'] ?>"><input type="hidden" name="state" value="frozen">
+                                        <button type="submit" class="px-2 py-1 rounded text-xs font-medium bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors"><?= e(__('btn_freeze')) ?></button>
+                                    </form>
+                                </div>
+                            </td>
+                            <?php endif; ?>
                             <td class="px-4 py-3 text-right">
                                 <div class="flex items-center justify-end gap-2">
                                     <a href="accounts.php?account=<?= (int) $r['id'] ?>" class="px-2.5 py-1 rounded-lg text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors"><?= e(__('acct_enter')) ?></a>

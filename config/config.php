@@ -235,29 +235,32 @@ function role_sees_all_branches(?string $role): bool
 
 /* -------------------------------------------------------------------------
  * 7c. Branding by context.
- *   Public visitors + agency users (the SaaS provider) -> GrowGig brand.
- *   Logged-in account users (the customer)             -> their brand (Aktifotak), unchanged.
+ *   Logged out / agency "all accounts"      -> GrowGig brand (the SaaS provider).
+ *   Account user (their own account)        -> that account's brand.
+ *   Agency user acting on an account        -> that account's brand (so they
+ *                                              know which tenant they're on).
  * ---------------------------------------------------------------------- */
 function current_brand(): array
 {
-    $growgig = [
-        'key'      => 'growgig',
-        'name'     => 'GrowGig',
-        'nav_name' => 'GrowGig',
-        'logo'     => 'assets/logo-growgig.png',
-        'accent'   => 'text-blue-600 dark:text-blue-400',
+    $growgig = ['key'=>'growgig','name'=>'GrowGig','nav_name'=>'GrowGig','logo'=>'assets/logo-growgig.png','accent'=>'text-blue-600 dark:text-blue-400'];
+    if (!is_logged_in()) { return $growgig; }
+    $acctId = current_account_id();
+    if (!$acctId) { return $growgig; } // agency "all accounts" (or no context)
+    global $pdo;
+    try {
+        $st = $pdo->prepare('SELECT name, brand_name, logo FROM accounts WHERE id = ?');
+        $st->execute([$acctId]);
+        $a = $st->fetch();
+    } catch (Throwable $e) { $a = null; }
+    if (!$a) { return $growgig; }
+    $name = ($a['brand_name'] ?: $a['name']) ?: 'GrowGig';
+    return [
+        'key'      => 'account',
+        'name'     => $name,
+        'nav_name' => $name,
+        'logo'     => $a['logo'] ?: 'assets/logo-aktifotak.png',
+        'accent'   => 'text-indigo-600 dark:text-indigo-400',
     ];
-    $aktifotak = [
-        'key'      => 'aktifotak',
-        'name'     => 'Aktifotak',
-        'nav_name' => 'Aktifotak Group Sdn Bhd',
-        'logo'     => 'assets/logo-aktifotak.png',
-        'accent'   => 'text-red-600 dark:text-red-400',
-    ];
-    if (is_logged_in() && !role_is_agency($_SESSION['user_role'] ?? '')) {
-        return $aktifotak;
-    }
-    return $growgig;
 }
 
 /* -------------------------------------------------------------------------
@@ -288,24 +291,29 @@ function role_can_use_orders(?string $role): bool
     return role_can_order($role) || role_can_request_order($role);
 }
 
-function get_subscription(): ?array
+function get_subscription(?int $accountId = null): ?array
 {
     global $pdo;
+    $accountId = $accountId ?? current_account_id();
     try {
+        if ($accountId) {
+            $st = $pdo->prepare('SELECT * FROM subscriptions WHERE account_id = ? ORDER BY id LIMIT 1');
+            $st->execute([$accountId]);
+            return $st->fetch() ?: null;
+        }
+        // agency "all accounts" / no context: earliest row (display only).
         $r = $pdo->query('SELECT * FROM subscriptions ORDER BY id LIMIT 1')->fetch();
         return $r ?: null;
-    } catch (Throwable $e) {
-        return null;
-    }
+    } catch (Throwable $e) { return null; }
 }
 
 /**
  * Returns ['status'=>trial|active|frozen, 'days_left'=>int, 'frozen'=>bool, 'price'=>float, 'trial_ends_at'=>?string].
  * Trial that has passed its end date counts as frozen.
  */
-function subscription_state(): array
+function subscription_state(?int $accountId = null): array
 {
-    $s = get_subscription();
+    $s = get_subscription($accountId);
     if (!$s) {
         return ['status' => 'active', 'days_left' => 0, 'frozen' => false, 'price' => 29.90, 'trial_ends_at' => null];
     }
