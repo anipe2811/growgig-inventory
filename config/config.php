@@ -288,24 +288,29 @@ function role_can_use_orders(?string $role): bool
     return role_can_order($role) || role_can_request_order($role);
 }
 
-function get_subscription(): ?array
+function get_subscription(?int $accountId = null): ?array
 {
     global $pdo;
+    $accountId = $accountId ?? current_account_id();
     try {
+        if ($accountId) {
+            $st = $pdo->prepare('SELECT * FROM subscriptions WHERE account_id = ? ORDER BY id LIMIT 1');
+            $st->execute([$accountId]);
+            return $st->fetch() ?: null;
+        }
+        // agency "all accounts" / no context: earliest row (display only).
         $r = $pdo->query('SELECT * FROM subscriptions ORDER BY id LIMIT 1')->fetch();
         return $r ?: null;
-    } catch (Throwable $e) {
-        return null;
-    }
+    } catch (Throwable $e) { return null; }
 }
 
 /**
  * Returns ['status'=>trial|active|frozen, 'days_left'=>int, 'frozen'=>bool, 'price'=>float, 'trial_ends_at'=>?string].
  * Trial that has passed its end date counts as frozen.
  */
-function subscription_state(): array
+function subscription_state(?int $accountId = null): array
 {
-    $s = get_subscription();
+    $s = get_subscription($accountId);
     if (!$s) {
         return ['status' => 'active', 'days_left' => 0, 'frozen' => false, 'price' => 29.90, 'trial_ends_at' => null];
     }
