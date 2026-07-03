@@ -16,3 +16,4 @@ assets/avatars/*
 *.log
 .DS_Store
 Thumbs.db
+.superpowers/
