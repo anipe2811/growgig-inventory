@@ -6,5 +6,8 @@
     # (plain :80 on this VPS belongs to the host nginx, which serves a
     # different app and would 404 — see deploy/nginx-app-growgig-redirect.conf).
     header Strict-Transport-Security "max-age=31536000"
-    reverse_proxy app:80
+    # "inventory-app" is an explicit network alias (see docker-compose.yml).
+    # Do NOT proxy to plain "app": another stack on this VPS (gsms) also
+    # exposes the DNS name "app" on the shared inventory_web network.
+    reverse_proxy inventory-app:80
 }

@@ -31,7 +31,14 @@ services:
       DB_PASS: ${DB_PASS}
       APP_DEBUG: "false"
     depends_on: [db]
-    networks: [internal, web]
+    networks:
+      internal:
+      web:
+        # Unique DNS name for Caddy. The generic service name "app" collided
+        # with the gsms stack (its service is also "app" and it joins this
+        # network), making docker DNS round-robin "app" between two different
+        # applications — customers randomly got the other app's 404 page.
+        aliases: [inventory-app]
 
   caddy:
     image: caddy:2
