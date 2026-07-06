@@ -1,13 +1,30 @@
 # Auto-HTTPS (Let's Encrypt) for the app. SITE_DOMAIN comes from the environment
 # (defaults to app.growgig.tech). The DNS A record already points to this VPS.
+#
+# NOTE this file lives in deploy/caddy/ and the whole DIRECTORY is bind-mounted
+# into the caddy container. Never mount the file directly: `git reset --hard`
+# replaces it with a new inode and the container keeps reading the stale copy.
+# Every edit MUST be committed here — the previous /gsms route was added by
+# hand on the VPS only, and a deploy silently wiped it.
 {$SITE_DOMAIN:app.growgig.tech} {
     encode gzip
     # Once a browser has visited over HTTPS it will never try plain HTTP again
     # (plain :80 on this VPS belongs to the host nginx, which serves a
     # different app and would 404 — see deploy/nginx-app-growgig-redirect.conf).
     header Strict-Transport-Security "max-age=31536000"
-    # "inventory-app" is an explicit network alias (see docker-compose.yml).
-    # Do NOT proxy to plain "app": another stack on this VPS (gsms) also
-    # exposes the DNS name "app" on the shared inventory_web network.
-    reverse_proxy inventory-app:80
+
+    # GrowGig SMS (separate stack, /opt/growgig-sms) is served under /gsms.
+    # Its container joins the external inventory_web network as "gsms-app".
+    handle_path /gsms* {
+        reverse_proxy gsms-app:80
+    }
+
+    # The inventory app. "inventory-app" is an explicit unique network alias
+    # (see docker-compose.yml). Do NOT proxy to plain "app": the gsms stack's
+    # compose service is also named "app", so docker DNS resolves "app" to
+    # BOTH containers and traffic round-robins between two different apps —
+    # that was the intermittent customer-facing 404.
+    handle {
+        reverse_proxy inventory-app:80
+    }
 }

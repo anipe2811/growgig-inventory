@@ -50,7 +50,10 @@ services:
     environment:
       SITE_DOMAIN: ${SITE_DOMAIN:-app.growgig.tech}
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Mount the DIRECTORY, not the file: git reset --hard replaces files
+      # with new inodes and a single-file bind mount would keep serving the
+      # stale pre-deploy Caddyfile forever (this bit us in production).
+      - ./deploy/caddy:/etc/caddy:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on: [app]
