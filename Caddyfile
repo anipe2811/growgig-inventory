@@ -2,5 +2,9 @@
 # (defaults to app.growgig.tech). The DNS A record already points to this VPS.
 {$SITE_DOMAIN:app.growgig.tech} {
     encode gzip
+    # Once a browser has visited over HTTPS it will never try plain HTTP again
+    # (plain :80 on this VPS belongs to the host nginx, which serves a
+    # different app and would 404 — see deploy/nginx-app-growgig-redirect.conf).
+    header Strict-Transport-Security "max-age=31536000"
     reverse_proxy app:80
 }

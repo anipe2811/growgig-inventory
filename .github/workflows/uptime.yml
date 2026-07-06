@@ -1,0 +1,31 @@
+# Uptime monitor: pings production every 30 minutes.
+# If any check fails the workflow fails and GitHub emails the repo owner.
+name: Uptime check
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: HTTPS health endpoint returns 200
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 https://app.growgig.tech/health.php)
+          echo "https://app.growgig.tech/health.php -> HTTP $code"
+          test "$code" = "200"
+
+      - name: Login page reachable over HTTPS
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 https://app.growgig.tech/login.php)
+          echo "https://app.growgig.tech/login.php -> HTTP $code"
+          test "$code" = "200"
+
+      - name: Plain HTTP redirects to HTTPS (not someone else's 404)
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 http://app.growgig.tech/login.php)
+          echo "http://app.growgig.tech/login.php -> HTTP $code"
+          test "$code" = "301"
