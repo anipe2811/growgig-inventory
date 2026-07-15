@@ -31,11 +31,9 @@ function nav_link_class(string $file, string $current): string
 function sidebar_link(string $href, string $current, string $label, string $icon, ?int $badge = null, array $activeFiles = []): string
 {
     $active = $activeFiles ? in_array($current, $activeFiles, true) : ($href === $current);
-    $cls = 'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ' . ($active
-        ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20'
-        : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/60');
+    $cls = 'ao-navlink' . ($active ? ' active' : '');
     $badgeHtml = ($badge !== null && $badge > 0)
-        ? '<span class="ml-auto min-w-[20px] h-5 px-1.5 rounded-full bg-red-600 text-white text-[11px] font-bold flex items-center justify-center">' . ($badge > 99 ? '99+' : (int) $badge) . '</span>'
+        ? '<span class="ao-count">' . ($badge > 99 ? '99+' : (int) $badge) . '</span>'
         : '';
     return '<a href="' . e($href) . '" class="' . $cls . '">'
         . '<svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="' . $icon . '"/></svg>'
@@ -74,28 +72,45 @@ $IC = [
         })();
     </script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script>tailwind.config = { darkMode: 'class' };</script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: { extend: {
+          colors: { indigo: {
+            50:'#eaf1ff',100:'#dbe6ff',200:'#bcd0ff',300:'#8fb0ff',400:'#5b86f7',
+            500:'#2563eb',600:'#2563eb',700:'#1d4ed8',800:'#1e40af',900:'#1e3a8a'
+          } },
+          fontFamily: {
+            sans: ['Figtree','system-ui','-apple-system','Segoe UI','sans-serif'],
+            display: ['Bricolage Grotesque','Figtree','sans-serif'],
+            mono: ['JetBrains Mono','ui-monospace','monospace']
+          }
+        } }
+      };
+    </script>
     <link rel="icon" type="image/png" href="<?= e($brand['logo']) ?>">
-    <?php if ($brand['key'] === 'growgig'): ?>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Figtree:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/theme.css?v=2">
+    <?php if ($brand['key'] === 'growgig'): ?>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;600;700&display=swap" rel="stylesheet">
     <style>.brand-font { font-family:'Orbitron',sans-serif; font-weight:600; letter-spacing:.01em }</style>
     <?php endif; ?>
 </head>
-<body class="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100 transition-colors duration-300 <?= is_logged_in() ? '' : 'flex flex-col' ?>">
+<body class="min-h-screen transition-colors duration-300 <?= is_logged_in() ? '' : 'flex flex-col' ?>">
 
 <?php if (is_logged_in()): ?>
 <div class="lg:flex min-h-screen">
 
     <!-- ===================== Sidebar ===================== -->
-    <aside id="sidebar" class="fixed lg:sticky inset-y-0 left-0 lg:top-0 z-50 h-screen w-64 shrink-0 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col -translate-x-full lg:translate-x-0 transition-transform duration-200">
+    <aside id="sidebar" class="ao-sidebar fixed lg:sticky inset-y-0 left-0 lg:top-0 z-50 h-screen w-64 shrink-0 border-r border-white/10 flex flex-col -translate-x-full lg:translate-x-0 transition-transform duration-200">
         <!-- Brand -->
-        <a href="dashboard.php" class="h-16 flex items-center gap-2 px-4 border-b border-gray-200 dark:border-gray-700 shrink-0">
-            <span class="inline-flex items-center justify-center rounded-lg<?= $brand['key'] === 'growgig' ? ' dark:bg-white dark:p-1' : '' ?>">
-                <img src="<?= e($brand['logo']) ?>" alt="<?= e($brand['name']) ?>" class="h-11 w-11 object-contain">
+        <a href="dashboard.php" class="h-16 flex items-center gap-2.5 px-4 border-b border-white/10 shrink-0">
+            <span class="ao-brand-tile">
+                <img src="<?= e($brand['logo']) ?>" alt="<?= e($brand['name']) ?>" class="h-8 w-8 object-contain">
             </span>
-            <span class="font-semibold text-sm <?= $brand['accent'] ?> leading-tight"><?= e($brand['nav_name']) ?></span>
+            <span class="font-display font-bold text-sm text-white leading-tight tracking-wide"><?= e($brand['nav_name']) ?></span>
         </a>
 
         <!-- Nav -->
@@ -126,10 +141,10 @@ $IC = [
         </nav>
 
         <!-- Bottom controls -->
-        <div class="border-t border-gray-200 dark:border-gray-700 p-3 space-y-2.5 shrink-0">
+        <div class="border-t border-white/10 p-3 space-y-2.5 shrink-0">
             <div class="flex items-center justify-between gap-2">
-                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300"><?= e(role_label($role)) ?></span>
-                <button type="button" onclick="toggleTheme()" title="<?= e(__('toggle_theme')) ?>" class="p-2 rounded-lg text-gray-500 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-white/10 text-blue-100"><?= e(role_label($role)) ?></span>
+                <button type="button" onclick="toggleTheme()" title="<?= e(__('toggle_theme')) ?>" class="p-2 rounded-lg text-slate-300 hover:bg-white/10 transition-colors">
                     <svg class="w-5 h-5 hidden dark:block" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.36 6.36l-.71-.71M6.34 6.34l-.71-.71m12.02 0l-.71.71M6.34 17.66l-.71.71M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
                     <svg class="w-5 h-5 block dark:hidden" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
                 </button>
@@ -137,21 +152,21 @@ $IC = [
             <?php if (role_is_agency($role)): ?>
                 <?php $acctList = all_accounts(); $actingId = current_account_id(); ?>
                 <form method="get" class="mt-1">
-                    <label class="block text-[11px] font-semibold text-gray-400 mb-1"><?= e(__('acct_switcher')) ?></label>
+                    <label class="block text-[11px] font-semibold text-white/50 mb-1"><?= e(__('acct_switcher')) ?></label>
                     <select name="account" onchange="this.form.submit()"
-                            class="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-indigo-500 outline-none">
-                        <option value="0" <?= $actingId === null ? 'selected' : '' ?>><?= e(__('acct_all')) ?></option>
+                            class="w-full rounded-lg border border-white/15 bg-white/10 text-white px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-blue-500 outline-none">
+                        <option class="text-gray-800" value="0" <?= $actingId === null ? 'selected' : '' ?>><?= e(__('acct_all')) ?></option>
                         <?php foreach ($acctList as $a): ?>
-                            <option value="<?= (int) $a['id'] ?>" <?= $actingId === (int) $a['id'] ? 'selected' : '' ?>><?= e($a['name']) ?></option>
+                            <option class="text-gray-800" value="<?= (int) $a['id'] ?>" <?= $actingId === (int) $a['id'] ? 'selected' : '' ?>><?= e($a['name']) ?></option>
                         <?php endforeach; ?>
                     </select>
                 </form>
             <?php endif; ?>
-            <div class="flex items-center text-xs font-semibold rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-                <a href="?lang=en" class="flex-1 text-center px-2.5 py-1.5 <?= $activeLang === 'en' ? 'bg-indigo-600 text-white' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700' ?>">EN</a>
-                <a href="?lang=ms" class="flex-1 text-center px-2.5 py-1.5 <?= $activeLang === 'ms' ? 'bg-indigo-600 text-white' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700' ?>">MY</a>
+            <div class="flex items-center text-xs font-semibold rounded-lg border border-white/15 overflow-hidden">
+                <a href="?lang=en" class="flex-1 text-center px-2.5 py-1.5 <?= $activeLang === 'en' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-white/10' ?>">EN</a>
+                <a href="?lang=ms" class="flex-1 text-center px-2.5 py-1.5 <?= $activeLang === 'ms' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-white/10' ?>">MY</a>
             </div>
-            <a href="?logout=1" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors">
+            <a href="?logout=1" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-red-300 hover:bg-red-500/15 transition-colors">
                 <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="<?= $IC['logout'] ?>"/></svg>
                 <span><?= __('nav_logout') ?></span>
             </a>
@@ -164,12 +179,12 @@ $IC = [
     <!-- ===================== Main column ===================== -->
     <div class="flex-1 min-w-0 flex flex-col min-h-screen">
         <!-- Mobile topbar -->
-        <header class="lg:hidden sticky top-0 z-30 h-16 flex items-center justify-between gap-3 px-4 bg-white/90 dark:bg-gray-800/90 backdrop-blur border-b border-gray-200 dark:border-gray-700">
-            <button type="button" onclick="toggleSidebar()" aria-label="<?= e(__('menu')) ?>" class="p-2 rounded-lg text-gray-500 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+        <header class="lg:hidden sticky top-0 z-30 h-16 flex items-center justify-between gap-3 px-4 ao-sidebar backdrop-blur border-b border-white/10">
+            <button type="button" onclick="toggleSidebar()" aria-label="<?= e(__('menu')) ?>" class="p-2 rounded-lg text-slate-200 hover:bg-white/10 transition-colors">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
             </button>
-            <span class="font-semibold text-sm <?= $brand['accent'] ?>"><?= e($brand['nav_name']) ?></span>
-            <a href="notifications.php" class="relative p-2 rounded-lg text-gray-500 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+            <span class="font-display font-bold text-sm text-white tracking-wide"><?= e($brand['nav_name']) ?></span>
+            <a href="notifications.php" class="relative p-2 rounded-lg text-slate-200 hover:bg-white/10 transition-colors">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="<?= $IC['bell'] ?>"/></svg>
                 <?php if ($unread > 0): ?><span class="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[10px] font-bold flex items-center justify-center"><?= $unread > 99 ? '99+' : (int) $unread ?></span><?php endif; ?>
             </a>

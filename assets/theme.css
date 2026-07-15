@@ -1,0 +1,205 @@
+/* ============================================================
+   GrowGig / Aktifotak Inventory — Blue-AO Design System
+   Ported from the Aktifotak Car Sticker System, re-themed BLUE.
+   Loaded AFTER Tailwind CDN so tokens + component classes win.
+   Dark mode keys off the existing `.dark` class on <html>.
+     --blue        #2563eb  (accent — actions, active, key numbers)
+     --ink         #0f172a  (sidebar, dark surfaces)
+     --paper       #f3f6fc  (content background — cool "paper")
+   Type: Bricolage Grotesque (display) / Figtree (body) / JetBrains Mono (numbers)
+   ============================================================ */
+
+:root {
+  --blue: #2563eb;
+  --blue-deep: #1d4ed8;
+  --blue-soft: #eaf1ff;
+  --ink: #0f172a;
+  --ink-2: #1e293b;
+  --paper: #f3f6fc;
+  --card: #ffffff;
+  --line: #e5e9f2;
+  --txt: #1e293b;
+  --muted: #64748b;
+  --heading: #0f172a;
+  --ok: #0e9f6e;
+  --ok-soft: #e2f6ee;
+  --warn: #c77414;
+  --warn-soft: #fdf1df;
+  --danger: #dc2626;
+  --danger-soft: #fdecec;
+  --blue-ink: #1d4ed8;
+  --ok-ink: #047857;
+  --warn-ink: #b45309;
+  --danger-ink: #b91c1c;
+  --sidebar: #0f172a;
+  --hero-grad: linear-gradient(120deg, #0f172a 0%, #1e3a8a 55%, #2563eb 100%);
+  --radius: 14px;
+  --shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 4px 16px rgba(15, 23, 42, 0.06);
+  --font-display: 'Bricolage Grotesque', 'Figtree', system-ui, sans-serif;
+  --font-body: 'Figtree', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+/* Dark mode — `:root.dark` beats plain `:root` on specificity. */
+:root.dark {
+  --blue: #3b82f6;
+  --blue-deep: #60a5fa;
+  --blue-soft: #16233f;
+  --ink: #0b1020;
+  --ink-2: #141a2e;
+  --paper: #0b1020;
+  --card: #141a2e;
+  --line: #26304a;
+  --txt: #e2e8f5;
+  --muted: #94a3c0;
+  --heading: #f1f5ff;
+  --ok: #2fc78f;
+  --ok-soft: #11332a;
+  --warn: #e79a3c;
+  --warn-soft: #362713;
+  --danger: #f87171;
+  --danger-soft: #3a1512;
+  --blue-ink: #bcd0ff;
+  --ok-ink: #34d399;
+  --warn-ink: #fbbf24;
+  --danger-ink: #fca5a5;
+  --sidebar: #0b1020;
+  --hero-grad: linear-gradient(120deg, #0b1020 0%, #16225a 55%, #2563eb 100%);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+/* ── Base ─────────────────────────────────────────────────── */
+body {
+  background: var(--paper);
+  color: var(--txt);
+  font-family: var(--font-body);
+}
+h1, h2, h3, .font-display { font-family: var(--font-display); }
+.font-mono, .num { font-family: var(--font-mono); }
+.num { font-variant-numeric: tabular-nums; letter-spacing: 0.01em; }
+
+::selection { background: rgba(37, 99, 235, 0.18); }
+::-webkit-scrollbar { width: 7px; height: 7px; }
+::-webkit-scrollbar-thumb { background: rgba(100, 116, 139, 0.4); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(100, 116, 139, 0.6); }
+:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+@keyframes aoFadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.ao-fade { animation: aoFadeUp 0.28s ease; }
+@media (prefers-reduced-motion: reduce) {
+  .ao-fade { animation: none; }
+}
+
+/* ── Card ─────────────────────────────────────────────────── */
+.ao-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.ao-card-pad { padding: 22px; }
+.ao-card-title {
+  color: var(--heading); font-family: var(--font-display); font-weight: 700;
+  font-size: 16px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;
+}
+
+/* ── Page head ────────────────────────────────────────────── */
+.ao-page-head { margin-bottom: 24px; }
+.ao-page-head h1, .ao-page-head h2 {
+  font-size: clamp(22px, 3vw, 28px); font-weight: 800; letter-spacing: -0.015em; color: var(--heading);
+}
+.ao-page-head p { color: var(--muted); font-size: 14px; margin-top: 4px; }
+
+/* ── Stat cards ───────────────────────────────────────────── */
+.ao-stat {
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 18px; box-shadow: var(--shadow);
+  transition: transform 0.14s ease, box-shadow 0.14s ease;
+}
+.ao-stat:hover { transform: translateY(-2px); box-shadow: 0 10px 26px rgba(15, 23, 42, 0.1); }
+.ao-stat .k { font-size: 11px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); }
+.ao-stat .v { font-family: var(--font-display); font-size: 28px; font-weight: 800; margin-top: 6px; color: var(--heading); font-variant-numeric: tabular-nums; }
+.ao-stat .v.blue { color: var(--blue); }
+.ao-stat .v.ok { color: var(--ok); }
+.ao-stat .v.warn { color: var(--warn); }
+.ao-stat .s { font-size: 12px; color: var(--muted); margin-top: 3px; }
+
+/* Hero gradient stat / panel */
+.ao-hero { background: var(--hero-grad); border: 0; color: #fff; box-shadow: 0 12px 32px rgba(30, 58, 138, 0.28); }
+.ao-hero .k { color: rgba(255, 255, 255, 0.6); }
+.ao-hero .v { color: #fff; }
+.ao-hero .s { color: rgba(255, 255, 255, 0.6); }
+
+/* ── Badge (pill) ─────────────────────────────────────────── */
+.ao-badge {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700;
+  letter-spacing: 0.03em; padding: 4px 10px; border-radius: 999px; white-space: nowrap;
+}
+.ao-badge-blue { background: var(--blue-soft); color: var(--blue-ink); }
+.ao-badge-ok { background: var(--ok-soft); color: var(--ok-ink); }
+.ao-badge-warn { background: var(--warn-soft); color: var(--warn-ink); }
+.ao-badge-danger { background: var(--danger-soft); color: var(--danger-ink); }
+.ao-badge-muted { background: rgba(100, 116, 139, 0.12); color: var(--muted); }
+
+/* ── Button ───────────────────────────────────────────────── */
+.ao-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font-family: var(--font-body); font-weight: 700; font-size: 14px; border: none;
+  border-radius: 10px; padding: 11px 20px; cursor: pointer; text-decoration: none;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+}
+.ao-btn:active { transform: translateY(1px); }
+.ao-btn-blue { background: var(--blue); color: #fff; }
+.ao-btn-blue:hover { background: var(--blue-deep); box-shadow: 0 6px 18px rgba(37, 99, 235, 0.3); }
+.ao-btn-ink { background: var(--ink); color: #fff; }
+.ao-btn-ink:hover { background: #000; }
+.ao-btn-ghost { background: transparent; color: var(--txt); border: 1.5px solid var(--line); }
+.ao-btn-ghost:hover { background: var(--card); border-color: var(--muted); }
+.ao-btn-sm { padding: 7px 14px; font-size: 13px; border-radius: 8px; }
+.ao-btn-block { width: 100%; }
+.ao-btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Form controls ────────────────────────────────────────── */
+.ao-lbl {
+  display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--muted); margin-bottom: 6px;
+}
+.ao-inp {
+  width: 100%; padding: 11px 14px; font-size: 15px; font-family: var(--font-body);
+  border: 1.5px solid var(--line); border-radius: 10px; background: var(--card); color: var(--txt);
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.ao-inp:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14); }
+
+/* ── Tab pills ────────────────────────────────────────────── */
+.ao-tabs { display: inline-flex; background: rgba(100, 116, 139, 0.12); border-radius: 11px; padding: 4px; gap: 4px; }
+.ao-tabs button, .ao-tabs a {
+  border: none; background: none; font-family: var(--font-body); font-weight: 700; font-size: 13.5px;
+  color: var(--muted); padding: 8px 18px; border-radius: 8px; cursor: pointer; text-decoration: none;
+  transition: all 0.12s ease;
+}
+.ao-tabs button.active, .ao-tabs a.active { background: var(--card); color: var(--heading); box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12); }
+
+/* ── Sidebar (AO ink) ─────────────────────────────────────── */
+.ao-sidebar { background: var(--sidebar); }
+.ao-navlink {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  color: #b7c0d6; font-size: 14px; font-weight: 600; padding: 11px 14px; border-radius: 10px;
+  text-decoration: none; position: relative;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.ao-navlink:hover { background: rgba(255, 255, 255, 0.07); color: #fff; }
+.ao-navlink.active { background: rgba(37, 99, 235, 0.22); color: #cfe0ff; }
+.ao-navlink.active::before {
+  content: ''; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px;
+  background: var(--blue); border-radius: 3px;
+}
+.ao-navlink .ao-count {
+  margin-left: auto; background: var(--blue); color: #fff; font-size: 10.5px; font-weight: 800;
+  border-radius: 999px; min-width: 19px; height: 19px; display: inline-flex; align-items: center;
+  justify-content: center; padding: 0 6px;
+}
+.ao-brand-tile {
+  width: 42px; height: 42px; border-radius: 12px; background: #fff; display: flex;
+  align-items: center; justify-content: center; flex-shrink: 0;
+}

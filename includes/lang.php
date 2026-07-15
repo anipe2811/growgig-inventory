@@ -557,6 +557,7 @@ $LANG = [
         // Login
         'login_title'          => 'Welcome Back',
         'login_subtitle'       => 'Sign in to continue to your dashboard.',
+        'login_hero_line'      => 'Inventory, under control.',
         'login_no_account'     => "Don't have an account?",
         'login_register_link'  => 'Create one',
         'login_success_reg'    => 'Registration successful! You may now log in.',
@@ -1197,6 +1198,7 @@ $LANG = [
         // Login
         'login_title'          => 'Selamat Kembali',
         'login_subtitle'       => 'Log masuk untuk meneruskan ke papan pemuka anda.',
+        'login_hero_line'      => 'Inventori, dalam kawalan.',
         'login_no_account'     => 'Tiada akaun?',
         'login_register_link'  => 'Cipta satu',
         'login_success_reg'    => 'Pendaftaran berjaya! Anda kini boleh log masuk.',

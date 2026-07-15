@@ -110,9 +110,9 @@ require __DIR__ . '/includes/header.php';
 <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
 
     <!-- Hero greeting -->
-    <div class="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-indigo-600 to-purple-600 px-6 sm:px-8 py-7 sm:py-9 shadow-xl shadow-indigo-600/20">
+    <div class="ao-fade relative overflow-hidden rounded-3xl px-6 sm:px-8 py-7 sm:py-9 shadow-xl shadow-blue-900/20" style="background:var(--hero-grad)">
         <div class="absolute -top-12 -right-10 w-52 h-52 rounded-full bg-white/10 blur-2xl"></div>
-        <div class="absolute -bottom-16 -left-10 w-52 h-52 rounded-full bg-fuchsia-400/10 blur-2xl"></div>
+        <div class="absolute -bottom-16 -left-10 w-52 h-52 rounded-full bg-blue-400/10 blur-2xl"></div>
         <div class="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
                 <h1 class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
@@ -156,25 +156,25 @@ require __DIR__ . '/includes/header.php';
     <div class="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         <?php
         $stats = [
-            ['card_total_items', $totalItems, 'from-indigo-500 to-violet-600', 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4'],
-            ['card_total_qty',   $totalQty,   'from-blue-500 to-cyan-600',     'M9 17v-6h13M9 5h13M3 5h.01M3 12h.01M3 19h.01'],
-            ['card_low_stock',   $lowStock,   'from-amber-500 to-orange-600',  'M12 9v2m0 4h.01M5 19h14a2 2 0 001.84-2.75L13.84 4a2 2 0 00-3.68 0L3.16 16.25A2 2 0 005 19z'],
+            ['card_total_items', $totalItems, 'from-blue-500 to-indigo-600',  'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4'],
+            ['card_total_qty',   $totalQty,   'from-indigo-500 to-blue-700',  'M9 17v-6h13M9 5h13M3 5h.01M3 12h.01M3 19h.01'],
+            ['card_low_stock',   $lowStock,   'from-amber-500 to-orange-600', 'M12 9v2m0 4h.01M5 19h14a2 2 0 001.84-2.75L13.84 4a2 2 0 00-3.68 0L3.16 16.25A2 2 0 005 19z'],
         ];
         if ($seesAll) {
-            $stats[] = ['card_branches', $totalBranches, 'from-teal-500 to-emerald-600', 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0H5m14 0h2M5 21H3m2-14h2m-2 4h2m6-4h2m-2 4h2m-6 8h4v-4h-4v4z'];
+            $stats[] = ['card_branches', $totalBranches, 'from-slate-600 to-slate-800', 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0H5m14 0h2M5 21H3m2-14h2m-2 4h2m6-4h2m-2 4h2m-6 8h4v-4h-4v4z'];
         }
         if (role_is_super($role)) {
-            $stats[] = ['card_total_users', $totalUsers, 'from-purple-500 to-fuchsia-600', 'M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1a4 4 0 100-8 4 4 0 000 8z'];
+            $stats[] = ['card_total_users', $totalUsers, 'from-slate-500 to-slate-700', 'M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1a4 4 0 100-8 4 4 0 000 8z'];
         }
         foreach ($stats as [$labelKey, $value, $grad, $icon]): ?>
-            <div class="p-5 rounded-2xl bg-white dark:bg-gray-800 border border-gray-200/70 dark:border-gray-700 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all">
+            <div class="ao-stat">
                 <div class="flex items-center justify-between">
-                    <p class="text-sm font-medium text-gray-500 dark:text-gray-400"><?= e(__($labelKey)) ?></p>
+                    <p class="k"><?= e(__($labelKey)) ?></p>
                     <span class="w-10 h-10 rounded-xl bg-gradient-to-br <?= $grad ?> text-white flex items-center justify-center shadow-md ring-1 ring-black/5">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="<?= $icon ?>"/></svg>
                     </span>
                 </div>
-                <p class="mt-3 text-3xl font-extrabold text-gray-900 dark:text-white"><?= e(number_format($value)) ?></p>
+                <p class="v mt-2"><?= e(number_format($value)) ?></p>
             </div>
         <?php endforeach; ?>
     </div>
@@ -185,15 +185,15 @@ require __DIR__ . '/includes/header.php';
         <div class="mt-3 grid gap-4 grid-cols-2 lg:grid-cols-4">
             <?php
             $kpis = [
-                ['dash_kpi_total',    $ordersTotal,                 'text-indigo-600 dark:text-indigo-400'],
+                ['dash_kpi_total',    $ordersTotal,                 'text-slate-700 dark:text-slate-200'],
                 ['dash_kpi_requests', $statusCounts['requested'],   'text-blue-600 dark:text-blue-400'],
                 ['dash_kpi_pending',  $statusCounts['pending'],     'text-amber-600 dark:text-amber-400'],
                 ['dash_kpi_received', $statusCounts['received'],     'text-emerald-600 dark:text-emerald-400'],
             ];
             foreach ($kpis as [$lk, $val, $tc]): ?>
-                <div class="p-4 rounded-2xl bg-white dark:bg-gray-800 border border-gray-200/70 dark:border-gray-700 shadow-sm">
-                    <p class="text-xs font-medium text-gray-500 dark:text-gray-400"><?= e(__($lk)) ?></p>
-                    <p class="mt-1 text-2xl font-extrabold <?= $tc ?>"><?= e(number_format($val)) ?></p>
+                <div class="ao-card p-4">
+                    <p class="text-[11px] font-bold uppercase tracking-wide" style="color:var(--muted)"><?= e(__($lk)) ?></p>
+                    <p class="mt-1 text-2xl font-extrabold font-display <?= $tc ?>"><?= e(number_format($val)) ?></p>
                 </div>
             <?php endforeach; ?>
         </div>
@@ -201,7 +201,7 @@ require __DIR__ . '/includes/header.php';
 
     <!-- Charts -->
     <div class="mt-6 grid gap-5 lg:grid-cols-2">
-        <div class="p-5 sm:p-6 rounded-2xl bg-white dark:bg-gray-800 border border-gray-200/70 dark:border-gray-700 shadow-sm">
+        <div class="ao-card p-5 sm:p-6">
             <h3 class="font-semibold text-gray-900 dark:text-white"><?= e(__('dash_chart_orders')) ?></h3>
             <div class="mt-4 h-64">
                 <?php if ($ordersTotal > 0): ?>
@@ -211,7 +211,7 @@ require __DIR__ . '/includes/header.php';
                 <?php endif; ?>
             </div>
         </div>
-        <div class="p-5 sm:p-6 rounded-2xl bg-white dark:bg-gray-800 border border-gray-200/70 dark:border-gray-700 shadow-sm">
+        <div class="ao-card p-5 sm:p-6">
             <h3 class="font-semibold text-gray-900 dark:text-white"><?= e(__('dash_chart_stock')) ?></h3>
             <div class="mt-4 h-64"><canvas id="stockTrendChart"></canvas></div>
         </div>
@@ -219,7 +219,7 @@ require __DIR__ . '/includes/header.php';
 
     <!-- Quick action cards -->
     <div class="mt-8 grid gap-5 sm:grid-cols-2">
-        <a href="inventory.php" class="group relative overflow-hidden p-6 rounded-2xl bg-white dark:bg-gray-800 border border-gray-200/70 dark:border-gray-700 shadow-sm hover:shadow-lg hover:-translate-y-0.5 hover:border-indigo-300 dark:hover:border-indigo-700 transition-all">
+        <a href="inventory.php" class="ao-card group relative overflow-hidden p-6 hover:-translate-y-0.5 hover:shadow-lg transition-all">
             <div class="flex items-start justify-between">
                 <div>
                     <h3 class="font-semibold text-gray-900 dark:text-white"><?= e(__('card_inventory_cta')) ?></h3>
@@ -230,7 +230,7 @@ require __DIR__ . '/includes/header.php';
                 </span>
             </div>
         </a>
-        <a href="profile.php" class="group relative overflow-hidden p-6 rounded-2xl bg-white dark:bg-gray-800 border border-gray-200/70 dark:border-gray-700 shadow-sm hover:shadow-lg hover:-translate-y-0.5 hover:border-indigo-300 dark:hover:border-indigo-700 transition-all">
+        <a href="profile.php" class="ao-card group relative overflow-hidden p-6 hover:-translate-y-0.5 hover:shadow-lg transition-all">
             <div class="flex items-start justify-between">
                 <div>
                     <h3 class="font-semibold text-gray-900 dark:text-white"><?= e(__('card_profile_cta')) ?></h3>
@@ -250,7 +250,7 @@ require __DIR__ . '/includes/header.php';
     if (typeof Chart === 'undefined') return;
     var dark = document.documentElement.classList.contains('dark');
     Chart.defaults.color = dark ? '#9ca3af' : '#6b7280';
-    Chart.defaults.font.family = 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+    Chart.defaults.font.family = 'Figtree, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
     var gridc = dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
 
     var statusEl = document.getElementById('ordersStatusChart');
