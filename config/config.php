@@ -26,8 +26,11 @@ if (APP_DEBUG) {
     error_reporting(E_ALL);
     ini_set('display_errors', '1');
 } else {
-    error_reporting(0);
+    // Production: never show errors to users, but always log them (they land on
+    // the container's stderr, i.e. `docker logs`), so a 500 is never silent.
+    error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
     ini_set('display_errors', '0');
+    ini_set('log_errors', '1');
 }
 
 /* -------------------------------------------------------------------------
