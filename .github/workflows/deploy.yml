@@ -122,6 +122,13 @@ jobs:
           ssh vps 'bash -s' <<'REMOTE'
           set -euo pipefail
 
+          # The whole script arrives on stdin (bash -s). Any child command that reads
+          # stdin (docker compose up/exec attach it by default) would swallow the rest
+          # of the script and bash would hit EOF and exit 0 early — silently skipping
+          # the rebuild. Wrap everything in main and run it with stdin detached; the
+          # migration loop's explicit `< file` redirect still works.
+          main() {
+
           APP_DIR=/opt/inventory
           # Belt-and-suspenders project scoping: explicit -p AND --project-directory + -f.
           COMPOSE="docker compose -p inventory --project-directory ${APP_DIR} -f ${APP_DIR}/docker-compose.yml"
@@ -171,6 +178,9 @@ jobs:
 
           echo "==> Deploy complete. Current inventory services:"
           ${COMPOSE} ps
+
+          }
+          main </dev/null
           REMOTE
 
       # 3) Scrub the key from the ephemeral runner (defence in depth).
