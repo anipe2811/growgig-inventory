@@ -24,7 +24,18 @@
     # compose service is also named "app", so docker DNS resolves "app" to
     # BOTH containers and traffic round-robins between two different apps —
     # that was the intermittent customer-facing 404.
+    handle /f/* {
+        reverse_proxy 172.16.4.1:80 {
+            header_up Host growgig.tech
+        }
+    }
     handle {
         reverse_proxy inventory-app:80
     }
+}
+
+growgig.tech, www.growgig.tech {
+    encode gzip
+    tls internal
+    reverse_proxy 172.16.4.1:80
 }
