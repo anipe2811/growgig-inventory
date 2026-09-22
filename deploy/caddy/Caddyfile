@@ -19,6 +19,14 @@
         reverse_proxy gsms-app:80
     }
 
+    # GrowGig USMS (separate stack, /opt/usms, repo anipe2811/usms) under /usms.
+    # The prefix header lets the PHP app build /usms/... links.
+    handle_path /usms* {
+        reverse_proxy usms-app:80 {
+            header_up X-Forwarded-Prefix /usms
+        }
+    }
+
     # The inventory app. "inventory-app" is an explicit unique network alias
     # (see docker-compose.yml). Do NOT proxy to plain "app": the gsms stack's
     # compose service is also named "app", so docker DNS resolves "app" to
@@ -38,4 +46,13 @@ growgig.tech, www.growgig.tech {
     encode gzip
     tls internal
     reverse_proxy 172.16.4.1:80
+}
+
+# USMS on its own subdomain (needs a proxied Cloudflare A record usms -> VPS;
+# Cloudflare SSL mode is Full, so the internal certificate is accepted).
+usms.growgig.tech {
+    encode gzip
+    tls internal
+    header Strict-Transport-Security "max-age=31536000"
+    reverse_proxy usms-app:80
 }
